@@ -1,0 +1,9 @@
+{
+    "CONTINUOUS":"False",
+    "Z_DIM":40,
+    "EPOCHS":200,
+    "INITIAL_CONV_KERNELS":16,
+    "L2_REG":1e-4,
+    "LR":5e-3,
+    "LATENT_SPLIT":"False"
+}

@@ -1,0 +1,9 @@
+nibabel
+matplotlib
+nilearn
+scikit-learn
+torcheval
+torchmetrics
+progress
+lolcat
+monai
