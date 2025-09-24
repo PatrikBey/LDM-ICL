@@ -13,16 +13,12 @@
 #
 # Data created within this script:
 #
-# SUBSTRATES:
-# 1. 3D question mask substrate
-# 2. 3D two point substrate
+# 50K artificial lesion masks split
+# into three distinct sets for both 2D and 3D
 #
-# DEFICITS:
-# 1. 3D question mask - overlay
-# 2. 3D two point mask - overlay
-# 3. 3D two point - COG distance
-# 4. 3D two point - disconnectome distance
-#
+# 1. recon_20K | pretraining dataset used for reconstruction pretraining
+# 2. icl_20K | main training dataset used for ICL pretraining
+# 3. validation_10K | validation dataset for few-shot training / validation
 ######
 
 ###################################

@@ -18,7 +18,7 @@ from torch.utils.data import Dataset, DataLoader
 import torch
 import torch.optim as optim
 
-os.chdir('2D/call_split')
+os.chdir('call_split')
 import torch as tc
 
 

@@ -22,7 +22,8 @@
 #        CLUSTER CONNECTIONS                #
 #                                           #
 #############################################
-
+# ---- macbook usage ---- #
+ssh-add --apple-use-keychain ~/.ssh/id_ed25519_ucl
 
 ssh patrik@144.82.48.21 -p 22
 # sftp -P 22 patrik@144.82.48.21
@@ -94,3 +95,4 @@ Path="/home/patrik/Data/LDM-ICL"
 sudo docker run -it --gpus all -v $Path:/data dldm:dev python
 
 create_training_data.py
+
