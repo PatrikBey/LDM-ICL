@@ -1,6 +1,6 @@
 FROM pytorch/pytorch
 
-LABEL author='Patrik Bey, <patrik.bey@bih-charite.de>'
+LABEL author='Patrik Bey, <patrik.bey@ucl.ac.uk>'
 LABEL version="0.1"
 LABEL description="This container contains the baseline model for deep lesion deficit mapping introduced in Pombo et al. (2023)"
 LABEL project="Deep variational lesion-deficit mapping; Pombo et al. (2023)"

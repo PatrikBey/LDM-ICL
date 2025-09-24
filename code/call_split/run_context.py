@@ -130,7 +130,11 @@ else:
 
 # ---- lesions ---- #
 lesions = np.load(os.path.join(Path,'validation',lesion_type))
-
+# lesions = np.load(os.path.join(Path,'1500_lesions.npy'))
+# la = np.zeros([1500,32,32])
+# for l in range(lesions.shape[0]):
+#     la[l] = np.rot90(np.sum(lesions[l], axis=0),1)
+# lesions = la
 # ---- ensure non-empty lesions ---- #
 
 sum_check = np.sum(lesions, axis=(1,2))
@@ -153,13 +157,15 @@ if n_lesions:
 
 # ---- load substrate ---- #
 substrate = np.load(os.path.join(Path,'validation',substrate_type))
+substrate = np.load(os.path.join(Path,'gt_9.npy'))
+substrate = np.rot90(np.sum(substrate, axis=0),1)
 
 # ---- load template brain ---- #
 # template_brain = np.load(os.path.join(Path,'validation','MNI152_T1_32.npy'))
 # template_brain = np.rot90(np.load(os.path.join(Path,'validation','mni_brain_32.npy'))[16,:,:],1)
 template_brain = np.rot90(np.sum(np.load(os.path.join(Path,'validation','mni_brain_32.npy')), axis = 0),1)
 
-
+# template_brain = np.zeros([32,32])
 # template_brain_mask = np.sum(template_brain,axis = 0)
 # template_brain_mask = np.where(template_brain_mask > np.quantile(template_brain_mask[template_brain_mask>0],0.5),1,0)
 # ---- deficit scores ---- #

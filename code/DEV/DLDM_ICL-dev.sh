@@ -30,6 +30,7 @@ ssh patrik@144.82.48.21 -p 22
 
 # ---- neuraxis3 ---- #
 ssh pbey@192.168.208.17
+# sftp pbey@192.168.208.17
 
 
 #############################################
@@ -41,7 +42,7 @@ ssh pbey@192.168.208.17
 
 Path="/home/patrik/Data/LDM-ICL"
 
-sudo docker run -it --gpus all -v $Path:/data dldm:dev python
+sudo docker run -it --gpus all -v $HOME/data:/data patrikneuro/dldm:dev python
 
 
 # # ---- fixing GPU docker runtime issues ---- # 
@@ -77,8 +78,8 @@ sudo docker run -it --gpus all -v $Path:/data dldm:dev python
 
 
 # # ---- Download LDM-ICL repository ---- #
-# wget https://github.com/PatrikBey/LDM-ICL/archive/refs/heads/main.zip
-
+# wget https://www.github.com/PatrikBey/LDM-ICL/archive/refs/heads/main.zip
+# 
 # unzip main.zip -d /home/patrik/Software/LDM-ICL/Docker
 
 
@@ -95,4 +96,8 @@ Path="/home/patrik/Data/LDM-ICL"
 sudo docker run -it --gpus all -v $Path:/data dldm:dev python
 
 create_training_data.py
+create_deficit_data.py
+
+
+
 
