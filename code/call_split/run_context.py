@@ -1,10 +1,13 @@
 #
 #
 #
-#   RUN script to perfrom DLDM after 20K reconstruction pretraining:
+# This script runs the initial in-context learning 
+# deep lesion deficit mapping experiments
 #
-#   TEST: pretrain on cognition deficit scores than finetune on motor deficit scores
-
+# The initial set up focuses on extracting complex lesion-deficit behaviour relationships
+# The approach entails:
+# 1. pretraining the model using simple behaviour relationships (lesion overlap, size-ratio)
+# 2. fine-tuning the model using complex behaviour relationships (center of gravity distance)
 
 
 import scipy.io, os, json
@@ -79,48 +82,53 @@ if aci:
         log_msg(f'UPDATE | utilizing anatomically constrained model')
 
 
+
+# ---- lesion set ---- #
+
+# lesion_type = get_variable('LESION_TYPE')
+
+# if not lesion_type:
+lesion_type = 'icl_20K_2D.npy'
+
+log_msg(f'UPDATE | lesion type: {lesion_type}')
+
+
 # ---- substrate ---- #
 
 # first substrate
-substrate_type = 'cognition_substrate_2D.npy'
+# substrate_type = 'cognition_substrate_2D.npy'
 # second substrate
-substrate_type = 'motor_substrate_2D.npy'
-# substrate_type = get_variable('SUBSTRATE_TYPE')
+# substrate_type = 'motor_substrate_2D.npy'
+substrate_type = get_variable('SUBSTRATE_TYPE')
 
 if not substrate_type:
     substrate_type = 'two_point_substrate_2D.npy'
 
 log_msg(f'UPDATE | substrate type: {substrate_type}')
-# ---- lesion set ---- #
-
-lesion_type = get_variable('LESION_TYPE')
-
-if not lesion_type:
-    lesion_type = '5000_lesions_2D.npy'
-
-log_msg(f'UPDATE | lesion type: {lesion_type}')
 
 # ---- deficit scores ---- #
 
-deficit_type = get_variable('DEFICIT_TYPE')
+deficits_train = ['overlap_binary','overlap_ratio_noisy', 'size']
+deficits_test = ['distance']
+# deficit_type = get_variable('DEFICIT_TYPE')
 
-if not deficit_type:
-    deficit_type = 'overlap_ratio_noisy'
+# if not deficit_type:
+#     deficit_type = 'overlap_ratio_noisy'
 
-log_msg(f'UPDATE | deficit type: {deficit_type}')
+# log_msg(f'UPDATE | deficit type: {deficit_type}')
 
-# ---- deficit noise ---- #
+# # ---- deficit noise ---- #
 
-if deficit_type == 'overlap_ratio_noisy':
-    log_msg(f'UPDATE | using noisy deficit scores')
-    deficit_noise = get_variable('DEFICIT_NOISE')
-    if not deficit_noise:
-        deficit_noise = 0.1
-    else:
-        deficit_noise = float(deficit_noise)
-    log_msg(f'UPDATE | deficit noise: {deficit_noise}')
-else:
-    deficit_noise = None
+# if deficit_type == 'overlap_ratio_noisy':
+#     log_msg(f'UPDATE | using noisy deficit scores')
+#     deficit_noise = get_variable('DEFICIT_NOISE')
+#     if not deficit_noise:
+#         deficit_noise = 0.1
+#     else:
+#         deficit_noise = float(deficit_noise)
+#     log_msg(f'UPDATE | deficit noise: {deficit_noise}')
+# else:
+#     deficit_noise = None
 
 #########################################
 #                                       #
@@ -129,7 +137,9 @@ else:
 #########################################
 
 # ---- lesions ---- #
-lesions = np.load(os.path.join(Path,'validation',lesion_type))
+train_lesions = np.load(os.path.join('/data','pretrain',lesion_type))
+test_lesions = np.load(os.path.join('/data','pretrain','validation_10K_2D.npy'))
+test_lesions = test_lesions[:1000,:,:]
 # lesions = np.load(os.path.join(Path,'1500_lesions.npy'))
 # la = np.zeros([1500,32,32])
 # for l in range(lesions.shape[0]):
@@ -137,11 +147,15 @@ lesions = np.load(os.path.join(Path,'validation',lesion_type))
 # lesions = la
 # ---- ensure non-empty lesions ---- #
 
-sum_check = np.sum(lesions, axis=(1,2))
+sum_check = np.sum(train_lesions, axis=(1,2))
 empty_lesion = np.where(sum_check==0)
+train_lesions = np.delete(train_lesions, empty_lesion, axis=0)
+log_msg(f'UPDATE | number of empty training lesions removed: {len(empty_lesion[0])}')
 
-lesions = np.delete(lesions, empty_lesion, axis=0)
-log_msg(f'UPDATE | number of empty lesions removed: {len(empty_lesion[0])}')
+sum_check = np.sum(test_lesions, axis=(1,2))
+empty_lesion = np.where(sum_check==0)
+test_lesions = np.delete(test_lesions, empty_lesion, axis=0)
+log_msg(f'UPDATE | number of empty validation lesions removed: {len(empty_lesion[0])}')
 
 # ---- select random lesions ---- #
 # if n_lesions:
@@ -152,16 +166,21 @@ log_msg(f'UPDATE | number of empty lesions removed: {len(empty_lesion[0])}')
 # first set of lesions for inference pre-training
 n_lesions = 1000
 if n_lesions:
-    lesions = lesions[n_lesions:n_lesions+1000,:,:]
+    train_lesions = train_lesions[:n_lesions,:,:]
     log_msg(f'UPDATE | using random {n_lesions} lesions')
+
+
+
+log_msg(f'UPDATE | number of training lesions: {train_lesions.shape[0]}')
+log_msg(f'UPDATE | number of validation lesions: {test_lesions.shape[0]}')
 
 # ---- load substrate ---- #
 substrate = np.load(os.path.join(Path,'validation',substrate_type))
-substrate = np.load(os.path.join(Path,'gt_9.npy'))
-substrate = np.rot90(np.sum(substrate, axis=0),1)
+# substrate = np.load(os.path.join(Path,'gt_9.npy'))
+# substrate = np.rot90(np.sum(substrate, axis=0),1)
 
 # ---- load template brain ---- #
-# template_brain = np.load(os.path.join(Path,'validation','MNI152_T1_32.npy'))
+template_brain = np.load(os.path.join(Path,'validation','MNI152_T1_32.npy'))
 # template_brain = np.rot90(np.load(os.path.join(Path,'validation','mni_brain_32.npy'))[16,:,:],1)
 template_brain = np.rot90(np.sum(np.load(os.path.join(Path,'validation','mni_brain_32.npy')), axis = 0),1)
 
@@ -171,15 +190,23 @@ template_brain = np.rot90(np.sum(np.load(os.path.join(Path,'validation','mni_bra
 # ---- deficit scores ---- #
 
 # deficit_scores = get_deficit(lesions, substrate, deficit_type)
-deficit_scores = get_deficit(lesions, substrate, deficit_type, deficit_noise)
+# deficit_scores = get_deficit(lesions, substrate, deficit_type, deficit_noise)
 
+scores_train = dict()
 
+for deficit_type in deficits_train:
+    scores_train[deficit_type] = get_deficit(train_lesions, substrate, deficit_type, 0.1)
+
+scores_test = get_deficit(test_lesions, substrate, 'distance')
 # ---- VISUALIZATIONS ---- #
 
 visualize_inference2D(substrate, substrate, template_brain, out_dir + '/substrate_overlay.png')
 
-aggregate = np.sum(lesions, axis=0)
-visualize_inference2D(aggregate, aggregate, template_brain, out_dir + '/lesions_aggregate.png')
+aggregate = np.sum(train_lesions, axis=0)
+visualize_inference2D(aggregate, aggregate, template_brain, out_dir + '/train_lesions_aggregate.png')
+
+aggregate = np.sum(test_lesions, axis=0)
+visualize_inference2D(aggregate, aggregate, template_brain, out_dir + '/test_lesions_aggregate.png')
 
 fig = plt.figure(figsize=(25., 25.))
 grid = ImageGrid(fig, 111, 
@@ -189,15 +216,21 @@ grid = ImageGrid(fig, 111,
                  )
 
 for i in range(10):
-    grid[i].imshow(lesions[i])
+    grid[i].imshow(train_lesions[i])
 
-plt.savefig(out_dir + '/10_lesions.png')
+plt.savefig(out_dir + '/10_train_lesions.png')
 plt.close()
 
-plt.hist(deficit_scores)
-plt.savefig(out_dir + '/deficit_scores_histogram.png')
-plt.close()
+for deficit_type in deficits_train:
+    plt.hist(scores_train[deficit_type])
+    plt.title(f'histogram of {deficit_type} deficit')
+    plt.savefig(out_dir + f'/{deficit_type}_histogram.png')
+    plt.close()
 
+plt.hist(scores_test)
+plt.title(f'histogram of validation deficit')
+plt.savefig(out_dir + f'/validation_histogram.png')
+plt.close()
 
 #########################################
 #                                       #
@@ -223,7 +256,7 @@ for p in params:
 with open(os.path.join(out_dir,'model_parameters.json'), "w") as f:
         json.dump(model_params, f, indent=4)
 
-model_params['INPUT_SIZE'] = lesions.shape[-1]
+model_params['INPUT_SIZE'] = train_lesions.shape[-1]
 
 log_msg('UPDATE | using model parameters:')
 for p in model_params.keys():
@@ -276,11 +309,6 @@ for p in model_params.keys():
 # plt.hist(deficit_scores)
 # plt.savefig(out_dir + '/deficit_scores_histogram.png')
 # plt.close()
-
-'''
-VALIDATING DEFICIT SCORE IMPACT
-
-'''
 # Create overlap ratios instead of binary scores
 
 # deficit_ratios = []
@@ -362,36 +390,11 @@ VALIDATING DEFICIT SCORE IMPACT
 #########################################
 
 # ---- add color channel ---- #
-if len(lesions.shape) < 4:
-    lesions = np.expand_dims(lesions, axis=1)
+if len(train_lesions.shape) < 4:
+    train_lesions = np.expand_dims(train_lesions, axis=1)
 
-# ---- train / test split ---- #
-# FIRST SPLIT INTO 90/10
-train_data, vc_data, train_labels, vc_labels = train_test_split(lesions,
-                                                                deficit_scores,
-                                                                test_size=0.1)
-
-# THEN SPLIT THE REMAINING 10% INTO VALIDATION AND CALIBRATION - 50/50
-val_data, cal_data, val_labels, cal_labels = train_test_split(vc_data,
-                                                              vc_labels,
-                                                              test_size=0.5)
-
-log_msg(f'UPDATE | dataset: train:{train_data.shape}, val:{val_data.shape}, cal:{cal_data.shape}')
-
-
-# import torch
-
-# class DeficitDataset(Dataset):
-#     def __init__(self, data, labels):
-#         self.data = data
-#         self.labels = labels
-#     def __len__(self):
-#         return len(self.data)
-#     def __getitem__(self, index):
-#         img = self.data[index]
-#         return img, np.expand_dims(self.labels[index], axis=0)
-
-n_samples = lesions.shape[0]
+# ---- determine batch size ---- #
+n_samples = train_lesions.shape[0]
 
 if n_samples > 511:
     batch_size = 256
@@ -400,23 +403,27 @@ else:
 
 log_msg(f'UPDATE | batch size: {batch_size}')
 
-# CREATE DATA LOADERS
-# TRAINING
-dataset = DeficitDataset(data=train_data, labels=train_labels)
-train_loader = DataLoader(dataset, batch_size=batch_size, drop_last=False,
-                                            shuffle=True, num_workers=0, pin_memory=True)
+# ---- prepare training dataset using various deficit scores ---- #
+
+datasets = dict()
+
+for deficit_type in deficits_train:
+    datasets[deficit_type] = DeficitDataset(data=train_lesions, labels=scores_train[deficit_type])
+
+# dataset = DeficitDataset(data=train_data, labels=train_labels)
+train_loaders = dict()
+for deficit_type in deficits_train:
+    train_loaders[deficit_type] = DataLoader(datasets[deficit_type], batch_size=batch_size, drop_last=False,shuffle=True, num_workers=0, pin_memory=True)
+
+# ---- prepare testing dataset using complex deficit scores ---- #
 
 # VALIDATION
-val_dataset = DeficitDataset(data=val_data, labels=val_labels)
+val_dataset = DeficitDataset(data=test_lesions, labels=scores_test)
 val_loader = DataLoader(val_dataset, batch_size=batch_size, drop_last=False,
                                             shuffle=True, num_workers=0, pin_memory=True)
 
-# # CALIBRATION
-# cal_dataset = DeficitDataset(data=cal_data, labels=cal_labels)
-# cal_loader = DataLoader(cal_dataset, batch_size=batch_size, drop_last=False,
-#                                             shuffle=True, num_workers=0, pin_memory=True)
 
-
+#################################
 # device = torch.device("cuda:0")
 device = get_device()
 
@@ -515,7 +522,7 @@ train_dice_iqr = []
 test_dice_iqr = []
 inference_dice = []
 
-dims = train_data.shape[2:]
+dims = train_lesions.shape[2:]
 
 inference_predictions = np.zeros([model_params['EPOCHS'], *dims])    
 

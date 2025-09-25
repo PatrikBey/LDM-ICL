@@ -29,7 +29,7 @@
 import sklearn.model_selection
 import numpy, os, argparse, torch, datetime, torch.optim as optim, numpy, matplotlib.pyplot as plt, scipy.stats, math, nibabel, random, sklearn #, cv2
 
-os.chdir('2D/recon')
+os.chdir('recon')
 
 
 from model2D import *
@@ -58,7 +58,7 @@ else:
 
 
 # # ---- load lesion masks ---- #
-lesions= numpy.load(os.path.join(Path,'validation','20000_lesions_2D.npy'))
+lesions= numpy.load(os.path.join('/data','pretrain','recon_20K_2D.npy'))
 # lesions= numpy.load(os.path.join('/data','10K_lesions.npy'))
 
 # lesions1 = numpy.expand_dims(lesions1, axis=1)

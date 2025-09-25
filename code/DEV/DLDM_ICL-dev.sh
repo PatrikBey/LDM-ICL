@@ -42,7 +42,7 @@ ssh pbey@192.168.208.17
 
 Path="/home/patrik/Data/LDM-ICL"
 
-sudo docker run -it --gpus all -v $HOME/data:/data patrikneuro/dldm:dev python
+sudo docker run -it --gpus all -v ${Path}:/data dldm:dev python
 
 
 # # ---- fixing GPU docker runtime issues ---- # 
@@ -100,4 +100,16 @@ create_deficit_data.py
 
 
 
+
+
+#############################################
+#                                           #
+#          INITIAL ICL TRAINING             #
+#                                           #
+#############################################
+
+
+Path="/home/patrik/Data/LDM-ICL"
+
+sudo docker run -it --gpus all -v $Path:/data -e OUTDIR=out_ICL_initial -e PRETRAINING=True -e ACI=False dldm:dev python
 
