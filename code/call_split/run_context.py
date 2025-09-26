@@ -108,8 +108,11 @@ log_msg(f'UPDATE | substrate type: {substrate_type}')
 
 # ---- deficit scores ---- #
 
-deficits_train = ['overlap_binary','overlap_ratio_noisy', 'size']
-deficits_test = ['distance']
+# deficits_train = ['overlap_binary','overlap_ratio_noisy', 'size']
+deficits_train = ['overlap_binary','size', 'distance']
+# deficits_train = ['overlap_binary','overlap_ratio_noisy']
+deficits_test = ['overlap_ratio_noisy']
+
 # deficit_type = get_variable('DEFICIT_TYPE')
 
 # if not deficit_type:
@@ -195,9 +198,9 @@ template_brain = np.rot90(np.sum(np.load(os.path.join(Path,'validation','mni_bra
 scores_train = dict()
 
 for deficit_type in deficits_train:
-    scores_train[deficit_type] = get_deficit(train_lesions, substrate, deficit_type, 0.1)
+    scores_train[deficit_type] = get_deficit(train_lesions, substrate, deficit_type, 0.25)
 
-scores_test = get_deficit(test_lesions, substrate, 'distance')
+scores_test = get_deficit(test_lesions, substrate, deficits_test[0], 0.1)
 # ---- VISUALIZATIONS ---- #
 
 visualize_inference2D(substrate, substrate, template_brain, out_dir + '/substrate_overlay.png')
@@ -393,6 +396,9 @@ for p in model_params.keys():
 if len(train_lesions.shape) < 4:
     train_lesions = np.expand_dims(train_lesions, axis=1)
 
+if len(test_lesions.shape) < 4:
+    test_lesions = np.expand_dims(test_lesions, axis=1)
+
 # ---- determine batch size ---- #
 n_samples = train_lesions.shape[0]
 
@@ -524,9 +530,29 @@ inference_dice = []
 
 dims = train_lesions.shape[2:]
 
+# --- set epochs to account for changes in training set --- #
+
+# model_params['EPOCHS'] = 210
+
 inference_predictions = np.zeros([model_params['EPOCHS'], *dims])    
+# ---- prepare training sets ---- #
+training_sets = list(datasets.keys())
+repetition_factor = 10
+
+set_order = []
+for i in range(len(training_sets)):
+    tmp = list(np.repeat(i,repetition_factor))
+    set_order.append(tmp)
+
+set_order = list(np.array(set_order).reshape(-1))
+# training_index = list(np.array(np.array([np.repeat(0, 10), np.repeat(1, 10), np.repeat(2, 10)])).reshape(-1))
+training_index = set_order * int(int(model_params['EPOCHS'] // len(training_sets))/repetition_factor)
+
+
+
 
 for epoch in range(model_params['EPOCHS']):
+    training_set = training_sets[training_index[epoch]]
     model.zero_grad()
     train_acc = 0
     t_epoch_loss = 0
@@ -534,7 +560,7 @@ for epoch in range(model_params['EPOCHS']):
     # The trackers for the mean and scale of the inference map
     vae_mask = np.zeros((dims))
     vae_scale = np.zeros((dims))
-    for (x, y) in train_loader:
+    for (x, y) in train_loaders[training_set]:
         optimizer.zero_grad()
         x = x.type(Tensor).to(device)
         y = y.type(Tensor).to(device)
@@ -656,7 +682,7 @@ plt.plot(test_dice, label = 'recon | validation dice')
 plt.fill_between(np.arange(len(test_dice)), test_dice - np.array(test_dice_iqr), test_dice + np.array(test_dice_iqr), alpha=0.2)
 plt.plot(inference_dice, label = 'inference | validation dice')
 plt.legend()
-plt.title(f'Mean dice scores | {lesions.shape[0]} lesions')
+plt.title(f'Mean dice scores | {test_lesions.shape[0]} lesions')
 plt.xlabel('epoch')
 plt.ylabel('dice coefficient')
 plt.savefig(out_dir + '/dice_scores.png')

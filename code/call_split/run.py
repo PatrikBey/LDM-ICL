@@ -15,7 +15,7 @@ from torch.utils.data import Dataset, DataLoader
 import torch
 import torch.optim as optim
 
-os.chdir('2D/call_split')
+os.chdir('call_split')
 import torch as tc
 
 
@@ -262,10 +262,6 @@ for p in model_params.keys():
 # plt.savefig(out_dir + '/deficit_scores_histogram.png')
 # plt.close()
 
-'''
-VALIDATING DEFICIT SCORE IMPACT
-
-'''
 # Create overlap ratios instead of binary scores
 
 # deficit_ratios = []
