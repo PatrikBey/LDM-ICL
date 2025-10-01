@@ -26,7 +26,7 @@
 ssh-add --apple-use-keychain ~/.ssh/id_ed25519_ucl
 
 ssh patrik@144.82.48.21 -p 22
-# sftp -P 22 patrik@144.82.48.21
+sftp -P 22 patrik@144.82.48.21
 
 # ---- neuraxis3 ---- #
 ssh pbey@192.168.208.17
@@ -111,5 +111,5 @@ create_deficit_data.py
 
 Path="/home/patrik/Data/LDM-ICL"
 
-sudo docker run -it --gpus all -v $Path:/data -e OUTDIR=out_ICL_initial -e PRETRAINING=True -e ACI=False dldm:dev python
+sudo docker run -it --gpus all -v $Path:/data -e OUTDIR=out_single-sub_mix-def -e PRETRAINING=True -e ACI=False dldm:dev python
 

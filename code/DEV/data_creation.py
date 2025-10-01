@@ -1116,3 +1116,61 @@ plt.imshow(numpy.where(la>0,1,0))
 plt.show()
 
 numpy.save(os.path.join(Path, 'CST_2D.npy'), numpy.where(la>0,1,0))
+
+
+
+
+#########################################
+#                                       #
+#        NEUROQUERY SUBSTRATE PREP      #
+#                                       #
+#########################################
+
+# source: Giles et al. 2023
+import nibabel, numpy, os, progress.bar, matplotlib.pyplot as plt
+from monai.transforms import Compose, Resize
+
+def resize(volume, target_size):
+    resize_transform = Compose([Resize((target_size[0],
+                                        target_size[1],
+                                        target_size[2]))])
+    if len(volume.shape) == 3:
+        volume = numpy.expand_dims(volume, axis=0)
+    resized_volume = resize_transform(volume)
+    resized_volume = numpy.squeeze(resized_volume)
+    return resized_volume
+
+os.makedirs('/data/maps', exist_ok=True)
+os.makedirs('/data/plots', exist_ok=True)
+os.makedirs('/data/volumes', exist_ok=True)
+os.makedirs('/data/resized_32', exist_ok=True)
+
+Networks=['Hearing','Language','Introspection','Cognition','Mood','Memory','Aversion','Coordination','Interoception','Sleep','Reward','Visual','Visual','Spatial','Motor','Somatosensory']
+
+img = nibabel.load('/data/functional_parcellation_2mm.nii.gz').get_fdata()
+
+for i in numpy.arange(1,len(Networks)+1):
+    tmp = numpy.where(img == i, 1, 0)
+    nii = nibabel.Nifti1Image(tmp.astype(float), affine=nibabel.load('/data/functional_parcellation_2mm.nii.gz').affine)
+    nibabel.save(nii, os.path.join('/data/volumes', f'Giles_et_al_2013_{Networks[i-1]}.nii.gz'))
+
+
+
+empty = numpy.zeros((32,32,32))
+for n in Networks:
+    img = nibabel.load(os.path.join('/data/volumes', f'Giles_et_al_2013_{n}.nii.gz')).get_fdata()
+    img_rs = resize(img, (32,32,32))
+    numpy.save(os.path.join('/data/resized_32', f'Giles_et_al_2013_{n}_32.npy'), img_rs)
+    la = numpy.rot90(numpy.sum(img_rs, axis = 0),1)
+    plt.imshow(numpy.where(la>0,1,0))
+    plt.title(n)
+    plt.savefig(os.path.join('/data/plots', f'Giles_et_al_2013_{n}_2D.png'))
+    plt.close()
+    empty = empty + img_rs
+    numpy.save(os.path.join('/data/maps', f'Giles_et_al_2013_{n}_2D.npy'), numpy.where(la>0,1,0))
+
+la = numpy.rot90(numpy.sum(empty, axis = 0),1)
+plt.imshow(numpy.where(la<1,numpy.nan, la), cmap = 'jet')
+plt.colorbar()
+plt.savefig(os.path.join('/data/plots', f'Giles_et_al_2013_all_2D.png'))
+plt.close()
