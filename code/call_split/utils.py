@@ -122,67 +122,159 @@ def get_deficit(_lesions, _substrate = None, _type = 'overlap_binary',_noise=Non
     '''
     return deficit scores for various computation types
     '''
-    import numpy, scipy.ndimage
+    import numpy, scipy.ndimage, progress.bar
     deficits = []
     if _type == 'overlap_binary':
-        for i in range(len(_lesions)):
-            overlap = _lesions[i] * _substrate
-            counts = numpy.count_nonzero(overlap)
-            voxels_gt = numpy.sum(_substrate)
-            ratio_lesion = counts / voxels_gt
-            # using minimal overlap ratio of 5%
-            if ratio_lesion > 0.05:
-                deficits.append(1)
-            else:
-                deficits.append(0)
-        return numpy.array(deficits)
-    elif _type == 'overlap_ratio':
-        for i in range(len(_lesions)):
-            overlap = _lesions[i] * _substrate
-            counts = numpy.count_nonzero(overlap)
-            if counts > 0:
-                voxels_mask = numpy.sum(_lesions[i])
-                ratio_lesion = counts / voxels_mask
-                deficits.append(ratio_lesion)
-            else:
-                deficits.append(0)
-        return numpy.array(deficits)
-    elif _type == 'overlap_ratio_noisy':
-        for i in range(len(_lesions)):
-            overlap = _lesions[i] * _substrate
-            counts = numpy.count_nonzero(overlap)
-            if counts > 0:
-                voxels_mask = numpy.sum(_lesions[i])
-                ratio_lesion = counts / voxels_mask
-                noise = numpy.random.normal(0, _noise)
-                out = ratio_lesion+noise
-                if out > 0:
-                    deficits.append(out)
+        with progress.bar.Bar('Processing', max=len(_lesions)) as bar:
+            for i in range(len(_lesions)):
+                overlap = _lesions[i] * _substrate
+                counts = numpy.count_nonzero(overlap)
+                voxels_gt = numpy.sum(_substrate)
+                ratio_lesion = counts / voxels_gt
+                # using minimal overlap ratio of 5%
+                if ratio_lesion > 0.05:
+                    deficits.append(1)
                 else:
                     deficits.append(0)
-            else:
-                deficits.append(0)
+                bar.next()
+        return numpy.array(deficits)
+    elif _type == 'overlap_ratio':
+        with progress.bar.Bar('Processing', max=len(_lesions)) as bar:
+            for i in range(len(_lesions)):
+                overlap = _lesions[i] * _substrate
+                counts = numpy.count_nonzero(overlap)
+                if counts > 0:
+                    voxels_mask = numpy.sum(_lesions[i])
+                    ratio_lesion = counts / voxels_mask
+                    deficits.append(ratio_lesion)
+                else:
+                    deficits.append(0)
+                bar.next()
+        return numpy.array(deficits)
+    elif _type == 'overlap_ratio_noisy':
+        with progress.bar.Bar('Processing', max=len(_lesions)) as bar:
+            for i in range(len(_lesions)):
+                overlap = _lesions[i] * _substrate
+                counts = numpy.count_nonzero(overlap)
+                if counts > 0:
+                    voxels_mask = numpy.sum(_lesions[i])
+                    ratio_lesion = counts / voxels_mask
+                    noise = numpy.random.normal(0, _noise)
+                    out = ratio_lesion+noise
+                    if out > 0:
+                        deficits.append(out)
+                    else:
+                        deficits.append(0)
+                else:
+                    deficits.append(0)
+                bar.next()
         return numpy.array(deficits)
     elif _type == 'distance':
         lbl = scipy.ndimage.label(_substrate)[0]
         groups = numpy.unique(lbl)
         gtcog = numpy.array(scipy.ndimage.center_of_mass(_substrate, lbl, [groups[1:]]))
-        for l in range(len(_lesions)):
-            dist = []
-            tmp = _lesions[l,:,:]
-            for i in groups[1:]:
-                dist.append(numpy.linalg.norm(gtcog[i-1] - numpy.array(scipy.ndimage.center_of_mass(tmp))))
-            deficits.append(numpy.min(dist))
+        with progress.bar.Bar('Processing', max=len(_lesions)) as bar:
+            for l in range(len(_lesions)):
+                dist = []
+                tmp = _lesions[l,:,:]
+                for i in groups[1:]:
+                    dist.append(numpy.linalg.norm(gtcog[i-1] - numpy.array(scipy.ndimage.center_of_mass(tmp))))
+                bar.next()
+                deficits.append(numpy.min(dist))
         deficits = numpy.array(deficits)
         deficits = deficits / numpy.max(deficits)
         return numpy.array(deficits)
     elif _type == 'size':
         gt_size = numpy.sum(_substrate)
-        for i in range(len(_lesions)):
-            voxels_mask = numpy.sum(_lesions[i])
-            deficits.append(voxels_mask/gt_size)
+        with progress.bar.Bar('Processing', max=len(_lesions)) as bar:
+            for i in range(len(_lesions)):
+                voxels_mask = numpy.sum(_lesions[i])
+                deficits.append(voxels_mask/gt_size)
+                bar.next()
         deficits = numpy.array(deficits)
         deficits = deficits / numpy.max(deficits)
         return numpy.array(deficits)
+    elif _type == 'trans':
+        from dipy.align.transforms import AffineTransform2D
+        from dipy.align.imaffine import AffineRegistration
+        affreg = AffineRegistration()
+        transform = AffineTransform2D()
+        with progress.bar.Bar('Processing', max=len(_lesions)) as bar:
+            for i in range(len(_lesions)):
+                lesion = _lesions[i]
+                affine = affreg.optimize(lesion,_substrate, transform, params0=None)
+                deficits.append(numpy.linalg.det(affine.affine))
+                bar.next()
+        deficits = numpy.array(deficits)
+        deficits = deficits / numpy.max(deficits)
+        return numpy.array(deficits)
+
+
+# def get_deficit(_lesions, _substrate = None, _type = 'overlap_binary',_noise=None):
+#     '''
+#     return deficit scores for various computation types
+#     '''
+#     import numpy, scipy.ndimage
+#     deficits = []
+#     if _type == 'overlap_binary':
+#         for i in range(len(_lesions)):
+#             overlap = _lesions[i] * _substrate
+#             counts = numpy.count_nonzero(overlap)
+#             voxels_gt = numpy.sum(_substrate)
+#             ratio_lesion = counts / voxels_gt
+#             # using minimal overlap ratio of 5%
+#             if ratio_lesion > 0.05:
+#                 deficits.append(1)
+#             else:
+#                 deficits.append(0)
+#         return numpy.array(deficits)
+#     elif _type == 'overlap_ratio':
+#         for i in range(len(_lesions)):
+#             overlap = _lesions[i] * _substrate
+#             counts = numpy.count_nonzero(overlap)
+#             if counts > 0:
+#                 voxels_mask = numpy.sum(_lesions[i])
+#                 ratio_lesion = counts / voxels_mask
+#                 deficits.append(ratio_lesion)
+#             else:
+#                 deficits.append(0)
+#         return numpy.array(deficits)
+#     elif _type == 'overlap_ratio_noisy':
+#         for i in range(len(_lesions)):
+#             overlap = _lesions[i] * _substrate
+#             counts = numpy.count_nonzero(overlap)
+#             if counts > 0:
+#                 voxels_mask = numpy.sum(_lesions[i])
+#                 ratio_lesion = counts / voxels_mask
+#                 noise = numpy.random.normal(0, _noise)
+#                 out = ratio_lesion+noise
+#                 if out > 0:
+#                     deficits.append(out)
+#                 else:
+#                     deficits.append(0)
+#             else:
+#                 deficits.append(0)
+#         return numpy.array(deficits)
+#     elif _type == 'distance':
+#         lbl = scipy.ndimage.label(_substrate)[0]
+#         groups = numpy.unique(lbl)
+#         gtcog = numpy.array(scipy.ndimage.center_of_mass(_substrate, lbl, [groups[1:]]))
+#         for l in range(len(_lesions)):
+#             dist = []
+#             tmp = _lesions[l,:,:]
+#             for i in groups[1:]:
+#                 dist.append(numpy.linalg.norm(gtcog[i-1] - numpy.array(scipy.ndimage.center_of_mass(tmp))))
+#             deficits.append(numpy.min(dist))
+#         deficits = numpy.array(deficits)
+#         deficits = deficits / numpy.max(deficits)
+#         return numpy.array(deficits)
+#     elif _type == 'size':
+#         gt_size = numpy.sum(_substrate)
+#         for i in range(len(_lesions)):
+#             voxels_mask = numpy.sum(_lesions[i])
+#             deficits.append(voxels_mask/gt_size)
+#         deficits = numpy.array(deficits)
+#         deficits = deficits / numpy.max(deficits)
+#         return numpy.array(deficits)
 
 

@@ -42,9 +42,9 @@ log_msg("UPDATE | parsing input variables")
 Path = get_variable('TEMPLATEDIR')
 
 # ---- lesion subset count ---- #
-# n_lesions = get_variable('N_LESIONS')
+n_lesions = get_variable('N_LESIONS')
 # set N for initial testing purposes
-n_lesions = 1000
+# n_lesions = 1000
 if n_lesions:
     n_lesions = int(n_lesions)
 
@@ -52,7 +52,7 @@ if n_lesions:
 
 out_dir = get_variable('OUTDIR')
 if not out_dir:
-    out_dir = '/data/out-ICL-NQ'
+    out_dir = '/data/out_dir'
 else:
     out_dir = os.path.join('/data', out_dir)
 
@@ -87,10 +87,12 @@ if aci:
 
 # ---- lesion set ---- #
 
-# lesion_type = get_variable('LESION_TYPE')
+lesion_type = get_variable('LESION_TYPE')
 
-# if not lesion_type:
-lesion_type = 'icl_20K_2D.npy'
+if not lesion_type:
+    lesion_type = '5000_lesions_2D.npy'
+
+# lesion_type = 'icl_20K_2D.npy'
 
 log_msg(f'UPDATE | lesion type: {lesion_type}')
 
@@ -101,42 +103,46 @@ log_msg(f'UPDATE | lesion type: {lesion_type}')
 # substrate_type = 'cognition_substrate_2D.npy'
 # second substrate
 # substrate_type = 'motor_substrate_2D.npy'
-# substrate_type = get_variable('SUBSTRATE_TYPE')
+substrate_type = get_variable('SUBSTRATE_TYPE')
 
-# if not substrate_type:
-#     substrate_type = 'two_point_substrate_2D.npy'
+if not substrate_type:
+    substrate_type = 'two_point_substrate_2D.npy'
+
+substrate = np.load(os.path.join(Path,'validation',substrate_type))
 
 # ---- multiple NQ based substrates ---- #
 
-Networks=['Hearing','Language','Introspection','Cognition','Mood','Memory','Aversion','Coordination','Interoception','Sleep','Reward','Visual','Spatial','Somatosensory']
+# Networks=['Hearing','Language','Introspection','Cognition','Mood','Memory','Aversion','Coordination','Interoception','Sleep','Reward','Visual','Spatial','Somatosensory']
 
-# use for validation:'Motor'
-test_substrate = 'Motor'
-log_msg(f'UPDATE | using multiple NeuroQuery based substrates')
-substrates = dict()
-for n in Networks:
-    substrates[n] = np.load(os.path.join('/data','substrates/maps', f'Giles_et_al_2013_{n}_2D.npy'))
-    log_msg(f'UPDATE | using substrate: {n}')
+# # use for validation:'Motor'
+# test_substrate = 'Motor'
+# log_msg(f'UPDATE | using multiple NeuroQuery based substrates')
+# substrates = dict()
+# for n in Networks:
+#     substrates[n] = np.load(os.path.join('/data','substrates/maps', f'Giles_et_al_2013_{n}_2D.npy'))
+#     log_msg(f'UPDATE | using substrate: {n}')
 
 # ---- single NQ based substrates ---- #
-Networks=['Motor']
+# Networks=['Motor']
 
 # use for validation:'Motor'
-test_substrate = 'Motor'
-log_msg(f'UPDATE | using multiple NeuroQuery based substrates')
-substrates = dict()
-for n in Networks:
-    substrates[n] = np.load(os.path.join('/data','substrates/maps', f'Giles_et_al_2013_{n}_2D.npy'))
-    log_msg(f'UPDATE | using substrate: {n}')
-
+# test_substrate = 'Motor'
+# log_msg(f'UPDATE | using multiple NeuroQuery based substrates')
+# substrates = dict()
+# for n in Networks:
+#     substrates[n] = np.load(os.path.join('/data','substrates/maps', f'Giles_et_al_2013_{n}_2D.npy'))
+#     log_msg(f'UPDATE | using substrate: {n}')
+test_substrate = substrate_type
 # ---- deficit scores ---- #
 
-deficits_train = ['overlap_binary','overlap_ratio_noisy']
+deficits_train = ['trans']
+# deficits_train = ['overlap_binary','overlap_ratio_noisy']
 # deficits_train = ['distance']
 # deficits_train = ['overlap_binary','size', 'distance']
 
 # deficits_train = ['overlap_binary','overlap_ratio_noisy']
-deficits_test = ['distance']
+# deficits_test = ['distance']
+deficits_test = ['trans']
 
 # deficit_type = get_variable('DEFICIT_TYPE')
 
@@ -145,18 +151,7 @@ deficits_test = ['distance']
 
 # log_msg(f'UPDATE | deficit type: {deficit_type}')
 
-# # ---- deficit noise ---- #
 
-# if deficit_type == 'overlap_ratio_noisy':
-#     log_msg(f'UPDATE | using noisy deficit scores')
-#     deficit_noise = get_variable('DEFICIT_NOISE')
-#     if not deficit_noise:
-#         deficit_noise = 0.1
-#     else:
-#         deficit_noise = float(deficit_noise)
-#     log_msg(f'UPDATE | deficit noise: {deficit_noise}')
-# else:
-#     deficit_noise = None
 
 #########################################
 #                                       #
@@ -165,10 +160,14 @@ deficits_test = ['distance']
 #########################################
 
 # ---- lesions ---- #
-train_lesions = np.load(os.path.join('/data','pretrain',lesion_type))
+# train_lesions = np.load(os.path.join('/data','pretrain',lesion_type))
+train_lesions = np.load(os.path.join(Path,'validation',lesion_type))
 
-test_lesions = np.load(os.path.join('/data','pretrain','validation_10K_2D.npy'))
-test_lesions = test_lesions[:1000,:,:]
+
+# test_lesions = np.load(os.path.join('/data','pretrain','validation_10K_2D.npy'))
+test_lesions = np.load(os.path.join(Path,'validation',lesion_type))
+
+test_lesions = test_lesions[4000:,:,:]
 
 # ---- ensure non-empty lesions ---- #
 
@@ -185,7 +184,7 @@ log_msg(f'UPDATE | number of empty validation lesions removed: {len(empty_lesion
 
 # ---- select consistent lesion subset ---- #
 # first set of lesions for inference pre-training
-# n_lesions = 1000
+n_lesions = 2500
 if n_lesions:
     train_lesions = train_lesions[:n_lesions,:,:]
     log_msg(f'UPDATE | using random {n_lesions} lesions')
@@ -200,26 +199,30 @@ template_brain = np.rot90(np.sum(np.load(os.path.join(Path,'validation','mni_bra
 
 # ---- calculate deficit scores ---- #
 scores_train = dict()
-noise_levels = [0.1, 0.5, 1.0]
+# noise_levels = [0.1, 0.5, 1.0]
+noise_levels = [0.25]
 
-for net in Networks:
-    substrate = substrates[net]
-    log_msg(f'UPDATE | calculating deficits for substrate: {net}')
-    for deficit_type in deficits_train:
-        for n in noise_levels:
-            if deficit_type == 'overlap_ratio_noisy':
-                idx = f'{net}-{deficit_type}-{n}'
-                scores_train[idx] = get_deficit(train_lesions, substrate, deficit_type, n)
-            else:
-                idx = f'{net}-{deficit_type}'
-                scores_train[idx] = get_deficit(train_lesions, substrate, deficit_type, 0.25)
+
+# for net in Networks:
+#     substrate = substrates[net]
+#     log_msg(f'UPDATE | calculating deficits for substrate: {net}')
+#     for deficit_type in deficits_train:
+#         for n in noise_levels:
+#             if deficit_type == 'overlap_ratio_noisy':
+#                 idx = f'{net}-{deficit_type}-{n}'
+#                 scores_train[idx] = get_deficit(train_lesions, substrate, deficit_type, n)
+#             else:
+#                 idx = f'{net}-{deficit_type}'
+#                 scores_train[idx] = get_deficit(train_lesions, substrate, deficit_type, 0.25)
+
+scores_train['trans'] = get_deficit(train_lesions,substrate, 'trans', 0.25)
 
 deficits = list(scores_train.keys())
 
 
 test_substrate = np.load(os.path.join('/data','substrates/maps', f'Giles_et_al_2013_{test_substrate}_2D.npy'))
 
-scores_test = get_deficit(test_lesions, test_substrate, deficits_test[0], 0.1)
+scores_test = get_deficit(test_lesions, test_substrate, deficits_test[0], 0.25)
 
 
 
@@ -361,10 +364,11 @@ optimizer = optim.Adamax(model.parameters(),
 log_msg('UPDATE | model paramter count: {}'.format(count_parameters(model)))
 
 # ---- set epochs to account for changes in training set ---- #
-repetition_factor = 10
+repetition_factor = 5
 dataset_reps = 5
 model_params['EPOCHS'] = len(deficits) * repetition_factor * dataset_reps
-
+p = 'EPOCHS'
+log_msg(f'UPDATE | {p}: {model_params[p]}')
 
 
 #################################
@@ -442,7 +446,7 @@ set_order = list(np.array(set_order).reshape(-1))
 # training_index = list(np.array(np.array([np.repeat(0, 10), np.repeat(1, 10), np.repeat(2, 10)])).reshape(-1))
 training_index = set_order * dataset_reps
 
-training_index = np.random.permutation(training_index).tolist()
+# training_index = np.random.permutation(training_index).tolist()
 # int(int(model_params['EPOCHS'] // len(training_sets))/repetition_factor)
 
 

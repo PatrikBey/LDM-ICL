@@ -6,7 +6,7 @@ LABEL description="This container contains the baseline model for deep lesion de
 LABEL project="Deep variational lesion-deficit mapping; Pombo et al. (2023)"
 LABEL reference="http://arxiv.org/abs/2305.17478"
 
-COPY Docker/requirements.txt requirements.txt
+COPY requirements.txt requirements.txt
 RUN pip install -r requirements.txt
 
 
@@ -16,10 +16,10 @@ RUN apt-get install figlet
 RUN mkdir -p /templates
 RUN mkdir "/src"
 
-COPY Docker/data "/templates"
+COPY data "/templates"
 ENV TEMPLATEDIR="/templates"
 
-COPY Docker/code "/src"
+COPY code "/src"
 ENV SRCDIR="/src"
 
 WORKDIR "/src"

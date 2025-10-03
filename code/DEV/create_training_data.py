@@ -85,11 +85,14 @@ Path='/data'
 
 
 
-brain_rs = numpy.load(os.path.join(os.environ.get('TEMPLATEDIR'),'validation','mni_brain_32.npy'))
+brain_rs = numpy.load(os.path.join('/data/templates','MNI152_64.npy'))
 
-n_runs = 100000
-n_masks = 50000
-masks = numpy.zeros([n_masks, 32, 32, 32])
+# ---- create 3D lesion masks ---- #
+
+n_runs = 25000
+n_masks = 20000
+dims = brain_rs.shape
+masks = numpy.zeros([n_masks, *dims])
 idx = 0
 
 
@@ -98,9 +101,9 @@ with progress.bar.Bar(f'creating lesion masks', max = n_masks) as bar:
         while idx < n_masks:
             chance = numpy.random.random()
             if chance > .75:
-                blob = random_blob(max_radius=5)
+                blob = random_blob(dims, max_radius=5)
             else:
-                blob = random_blob(max_radius=2)
+                blob = random_blob(dims, max_radius=2)
             # updated_blob = adjust_shape(blob)
             # tmp = brain_rs * updated_blob
             tmp = brain_rs * blob
@@ -119,26 +122,26 @@ with progress.bar.Bar(f'creating lesion masks', max = n_masks) as bar:
 
 
 # ---- save reconstruction pretraining masks ---- #
-numpy.save(os.path.join(Path,'pretrain-recon_20K.npy'), masks[:20000,:,:,:])
+numpy.save(os.path.join(Path,'pretrain-recon_10K.npy'), masks[:10000,:,:,:])
 
 # ---- save in-context learning pretraining masks ---- #
-numpy.save(os.path.join(Path,'pretrain-icl_20K.npy'), masks[20000:40000,:,:,:])
+numpy.save(os.path.join(Path,'pretrain-tune_5K.npy'), masks[10000:15000,:,:,:])
 
 # ---- save fine-tuning masks ---- #
-numpy.save(os.path.join(Path,'finetune_10K.npy'), masks[40000:50000,:,:,:])
+numpy.save(os.path.join(Path,'predict_5K.npy'), masks[15000:,:,:,:])
 
 
 
 # ---- CREATE 2D MASKS ---- #
 
-Path='/data'
+Path='/data/lesions'
 
 masks = os.listdir(Path)
 
 
 for m in masks:
     tmp = numpy.load(os.path.join(Path,m))
-    lesions = numpy.zeros([tmp.shape[0],32,32])
+    lesions = numpy.zeros([tmp.shape[0],64,64])
     for i in range(tmp.shape[0]):
         lesions[i] = numpy.where(numpy.rot90(numpy.sum(tmp[i], axis=0), k=1) > 0, 1, 0)
     numpy.save(os.path.join(Path, m.replace('.npy','_2D.npy')), lesions)

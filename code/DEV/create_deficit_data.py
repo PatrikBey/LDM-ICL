@@ -117,6 +117,20 @@ def get_deficit(_lesions, _substrate = None, _type = 'overlap_binary',_noise=Non
         deficits = numpy.array(deficits)
         deficits = deficits / numpy.max(deficits)
         return numpy.array(deficits)
+    elif _type == 'trans':
+        from dipy.align.transforms import AffineTransform2D
+        from dipy.align.imaffine import AffineRegistration
+        affreg = AffineRegistration()
+        transform = AffineTransform2D()
+        with progress.bar.Bar('Processing', max=len(_lesions)) as bar:
+            for i in range(len(_lesions)):
+                lesion = _lesions[i]
+                affine = affreg.optimize(lesion,_substrate, transform, params0=None)
+                deficits.append(numpy.linalg.det(affine.affine))
+                bar.next()
+        deficits = numpy.array(deficits)
+        deficits = deficits / numpy.max(deficits)
+        return numpy.array(deficits)
 
 ###################################
 #                                 #
@@ -157,5 +171,6 @@ for deficit in deficits_types:
     plt.tight_layout()
     plt.savefig(os.path.join(Path,'plots',f'{deficit}.png'))
     plt.close()
+
 
 
