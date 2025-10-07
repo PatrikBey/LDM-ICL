@@ -51,27 +51,29 @@ log_msg('START | Running Deep Variational Lesion Deficit Mapping.')
 Path=os.getenv("TEMPLATEDIR")
 
 if os.path.isdir('/data'):
-    out_dir = '/data/pretrain_20K'
+    out_dir = '/data/pretrain_10K'
     os.makedirs(out_dir, exist_ok=True)
 else:
     out_dir = Path
 
 
 # # ---- load lesion masks ---- #
-lesions= numpy.load(os.path.join('/data','pretrain','recon_20K_2D.npy'))
-# lesions= numpy.load(os.path.join('/data','10K_lesions.npy'))
+lesions= numpy.load(os.path.join('/data','lesions','pretrain-recon_10K_2D.npy'))
+lesions = numpy.where(lesions>0,1,0)
+# lesions= numpy.load(os.path.join(Path,'validation','5000_lesions_2D.npy'))
 
-# lesions1 = numpy.expand_dims(lesions1, axis=1)
+# lesions = numpy.sum(lesions, axis=1)
+# for l in range(lesions.shape[0]):
+#     lesions[l,:,:] = np.rot90(lesions[l,:,:],1)
 
-# lesions2 = numpy.load(os.path.join(Path,'validation','labelsnew.npy'))
-
-# lesions = numpy.concatenate((lesions1, lesions2), axis=0)
+# numpy.save( os.path.join('/data','lesions','pretrain-recon_10K_2D.npy'), lesions)
 
 # ---- load template brain ---- #
-# template_brain = numpy.load(os.path.join(Path,'validation','mni_brain_32.npy'))
-template_brain = np.rot90(np.sum(np.load(os.path.join(Path,'validation','mni_brain_32.npy')), axis = 0),1)
+# template_brain = np.rot90(np.sum(np.load(os.path.join(Path,'validation','mni_brain_32.npy')), axis = 0),1)
+template_brain = np.rot90(np.sum(np.load(os.path.join('/data','templates','MNI152_64.npy')), axis = 0),1)
 
 aggregate = np.sum(lesions, axis=0)
+
 visualize_inference2D(aggregate, aggregate, template_brain, out_dir + '/lesions_aggregate.png')
 
 ##################################
@@ -85,19 +87,12 @@ if lesions.ndim == 3:
     lesions = numpy.expand_dims(lesions, axis=1)
 
 
-'''
-TESTING DEFICIT SCORE / COVARIANT IMPACT ON LESION RECONSTRUCTION
-
-1. DONT INCLUDE EITHER
->> No labels beside lesion masks
-'''
-
 # ---- single 10% train / test split ---- #
 train_data, vc_data = sklearn.model_selection.train_test_split(lesions, test_size=0.1)
 
 # ---- split test into validation / calibration 50% ---- #
 val_data, cal_data = sklearn.model_selection.train_test_split(vc_data, test_size=0.5)
-
+val_data = vc_data
 
 
 ##################################
@@ -130,14 +125,14 @@ val_loader = DataLoader(val_dataset,
                         num_workers=0, 
                         pin_memory=True)
 
-# CALIBRATION
-cal_dataset = LesionDataset(data=cal_data)
-cal_loader = DataLoader(cal_dataset, 
-                        batch_size=batch_size, 
-                        drop_last=False,
-                        shuffle=True,
-                        num_workers=0, 
-                        pin_memory=True)
+# # CALIBRATION
+# cal_dataset = LesionDataset(data=cal_data)
+# cal_loader = DataLoader(cal_dataset, 
+#                         batch_size=batch_size, 
+#                         drop_last=False,
+#                         shuffle=True,
+#                         num_workers=0, 
+#                         pin_memory=True)
 
 
 device = get_device()
@@ -156,7 +151,7 @@ device = get_device()
 INPUT_SIZE = dataset[0].shape[-1]
 
 CONTINUOUS = False
-Z_DIM = 20
+Z_DIM = 40 # use 40 for no-latent split LDM, 20 for latent split LDM
 EPOCHS = 500
 INITIAL_CONV_KERNELS = 16
 L2_REG = 1e-4
@@ -170,6 +165,7 @@ model = ModelWrapperRecon(INPUT_SIZE,
                      continuous=CONTINUOUS,
                      in_channels=1, # only lesion mask input channel
                      lesion_threshold=False).to(device)
+
 
 if model.continuous:
     log_msg('UPDATE | using continuous model')
@@ -203,6 +199,7 @@ training_losses = []
 validation_losses = []
 
 dims = dataset[0].shape[1:]
+
 for epoch in range(EPOCHS):
     model.zero_grad()
     train_acc = 0

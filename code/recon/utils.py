@@ -18,7 +18,9 @@ def get_device():
     return cuda device if GPU available
     '''
     import torch
-    return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    # return torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    return torch.device(f"cuda:{torch.cuda.current_device()}" if torch.cuda.is_available() else "cpu")
+
 
 
 #########################
@@ -33,7 +35,6 @@ def log_msg(_string):
     '''
     import datetime, os, sys
     print(f'{datetime.date.today().strftime("%a %B %d %H:%M:%S %Z %Y")} {str(os.path.basename(sys.argv[0]))}: {str(_string)}')
-
 
 
 #########################

@@ -23,23 +23,34 @@ def resize(volume, target_size):
 
 Path="/mnt/h/ATLAS/MNI"
 
-atlases = ['Schaefer2018','Julich2024']
+atlases = ['Schaefer2018','AAL3']
 
 
 for a in atlases:
     tmp = nibabel.load(os.path.join(Path,f'{a}MNI152.nii.gz')).get_fdata().astype(int)
     rois = numpy.unique(tmp[tmp>0])
+    la = numpy.zeros((64, 64, 64))
     with progress.bar.Bar(f'creating rois for {a}', max = len(rois)) as bar:
         for r in rois:
             roi = numpy.where(tmp == r, 1, 0)
             roi_rs = resize(roi, (64,64,64))
-            roi_bin = numpy.where(roi_rs > 0, 1, 0)
-            numpy.save(os.path.join(Path,f'{a}_roi_{int(r)}.npy'), roi_bin)
+            roi_bin = numpy.where(roi_rs > 0.5, 1, 0)
+            # roi_bin = numpy.where(roi_rs > numpy.quantile(roi_rs[roi_rs>0], 0.9), 1, 0)
+            roi_bin[32:,:,:] = 0
+            numpy.save(os.path.join(Path,'substrates',f'{a}_roi_{int(r)}.npy'), roi_bin)
+            la = la + roi_bin
             bar.next()
+            nibabel.save(nibabel.Nifti1Image(roi_bin.astype(numpy.float32   ), numpy.eye(4)), os.path.join(Path,'nii',f'{a}-{r}.nii.gz'))
 
+# nibabel.save(nibabel.Nifti1Image(la.astype(numpy.float32   ), numpy.eye(4)), os.path.join(Path,f'{a}Combined.nii.gz')) 
 
-brain = nibabel.load(os.path.join(Path,'MNI152.nii.gz')).get_fdata()
+for r in numpy.arange(2,171,2):
+    file = os.path.join(Path,'substrates',f'{a}_roi_{r}.npy')
+    if os.path.exists(file):
+        os.remove(file)
 
-tmp = resize(brain, (64,64,64))
-nibabel.save(nibabel.Nifti1Image(tmp.astype(numpy.float32   ), numpy.eye(4)), os.path.join(Path,'MNI152_64.nii.gz'))
+# brain = nibabel.load(os.path.join(Path,'MNI152.nii.gz')).get_fdata()
+
+# tmp = resize(brain, (64,64,64))
+# nibabel.save(nibabel.Nifti1Image(tmp.astype(numpy.float32   ), numpy.eye(4)), os.path.join(Path,'MNI152_64.nii.gz'))
 

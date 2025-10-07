@@ -21,11 +21,12 @@ from torch.utils.data import Dataset, DataLoader
 import torch
 import torch.optim as optim
 
-os.chdir('call_split')
+import shutil
 import torch as tc
 
 
-# from model import *
+# ---- import model classes ---- #
+os.chdir('call_split')
 from model import *
 from utils import log_msg, get_variable, get_device, DeficitDataset, visualize_inference2D, count_parameters, vec_dice, dice_2D, get_deficit
 
@@ -69,12 +70,12 @@ if pretraining:
         log_msg(f'UPDATE | utilizing pretrained model')
 
 # ---- pretraining model weights ---- #
-model_path = get_variable('MODEL_PATH')
-if not model_path: 
-    model_path = os.path.join('/data','pretrain_20K','recon_vae.pth')
+# model_path = get_variable('MODEL_PATH')
+# if not model_path: 
+#     model_path = os.path.join('/data','pretrain_10K','recon_vae.pth')
 
-if pretraining:
-    log_msg(f'UPDATE | using pretrained model weights: {model_path}')
+# if pretraining:
+#     log_msg(f'UPDATE | using pretrained model weights: {model_path}')
 
 # ---- anatomically constrained inference  ---- #
 aci = get_variable('ACI')
@@ -85,16 +86,26 @@ if aci:
 
 
 
-# ---- lesion set ---- #
+# ---- lesion sets ---- #
 
-lesion_type = get_variable('LESION_TYPE')
+train_lesion_type = get_variable('TRAIN_LESION_TYPE')
 
-if not lesion_type:
-    lesion_type = '5000_lesions_2D.npy'
+if not train_lesion_type:
+    train_lesion_type = 'pretrain-tune_5K_2D.npy'
 
 # lesion_type = 'icl_20K_2D.npy'
 
-log_msg(f'UPDATE | lesion type: {lesion_type}')
+log_msg(f'UPDATE | training lesion type: {train_lesion_type}')
+
+
+test_lesion_type = get_variable('TEST_LESION_TYPE')
+
+if not test_lesion_type:
+    test_lesion_type = 'predict_5K_2D.npy'
+
+# lesion_type = 'icl_20K_2D.npy'
+
+log_msg(f'UPDATE | training lesion type: {test_lesion_type}')
 
 
 # ---- substrate ---- #
@@ -106,10 +117,12 @@ log_msg(f'UPDATE | lesion type: {lesion_type}')
 substrate_type = get_variable('SUBSTRATE_TYPE')
 
 if not substrate_type:
-    substrate_type = 'two_point_substrate_2D.npy'
+    substrate_type = 'AAL3_roi_1.npy'
 
-substrate = np.load(os.path.join(Path,'validation',substrate_type))
-
+# substrate = np.load(os.path.join(Path,'validation',substrate_type))
+substrate = np.load(os.path.join('/data','substrates',substrate_type))
+substrate = np.rot90(np.sum(substrate, axis = 0),1)
+substrate = np.where(substrate>0,1,0)
 # ---- multiple NQ based substrates ---- #
 
 # Networks=['Hearing','Language','Introspection','Cognition','Mood','Memory','Aversion','Coordination','Interoception','Sleep','Reward','Visual','Spatial','Somatosensory']
@@ -132,25 +145,21 @@ substrate = np.load(os.path.join(Path,'validation',substrate_type))
 # for n in Networks:
 #     substrates[n] = np.load(os.path.join('/data','substrates/maps', f'Giles_et_al_2013_{n}_2D.npy'))
 #     log_msg(f'UPDATE | using substrate: {n}')
+
 test_substrate = substrate_type
 # ---- deficit scores ---- #
 
-deficits_train = ['trans']
-# deficits_train = ['overlap_binary','overlap_ratio_noisy']
-# deficits_train = ['distance']
-# deficits_train = ['overlap_binary','size', 'distance']
+deficits_train = get_variable('DEFICITS_TRAIN')
+deficits_test = get_variable('DEFICITS_TEST')
 
-# deficits_train = ['overlap_binary','overlap_ratio_noisy']
-# deficits_test = ['distance']
-deficits_test = ['trans']
+if not deficits_train:
+    deficits_train = ['overlap_ratio_noisy']
 
-# deficit_type = get_variable('DEFICIT_TYPE')
+if not deficits_test:
+    deficits_test = ['overlap_ratio_noisy']
 
-# if not deficit_type:
-#     deficit_type = 'overlap_ratio_noisy'
-
-# log_msg(f'UPDATE | deficit type: {deficit_type}')
-
+log_msg(f'UPDATE | training deficits: {deficits_train}')
+log_msg(f'UPDATE | testing deficits: {deficits_test}')
 
 
 #########################################
@@ -160,14 +169,18 @@ deficits_test = ['trans']
 #########################################
 
 # ---- lesions ---- #
-# train_lesions = np.load(os.path.join('/data','pretrain',lesion_type))
-train_lesions = np.load(os.path.join(Path,'validation',lesion_type))
-
+train_lesions = np.load(os.path.join('/data','lesions',train_lesion_type))
+train_lesions = np.where(train_lesions>0,1,0)
+# train_lesions = np.load(os.path.join(Path,'validation',lesion_type))
+if n_lesions:
+    train_lesions = train_lesions[:n_lesions,:,:]
 
 # test_lesions = np.load(os.path.join('/data','pretrain','validation_10K_2D.npy'))
-test_lesions = np.load(os.path.join(Path,'validation',lesion_type))
+test_lesions = np.load(os.path.join('/data','lesions',test_lesion_type))
+test_lesions = np.where(test_lesions>0,1,0)
 
-test_lesions = test_lesions[4000:,:,:]
+# ---- reduce validation set to 1K lesions ---- #
+test_lesions = test_lesions[:1000,:,:]
 
 # ---- ensure non-empty lesions ---- #
 
@@ -184,83 +197,57 @@ log_msg(f'UPDATE | number of empty validation lesions removed: {len(empty_lesion
 
 # ---- select consistent lesion subset ---- #
 # first set of lesions for inference pre-training
-n_lesions = 2500
-if n_lesions:
-    train_lesions = train_lesions[:n_lesions,:,:]
-    log_msg(f'UPDATE | using random {n_lesions} lesions')
+# n_lesions = 2500
+# if n_lesions:
+#     train_lesions = train_lesions[:n_lesions,:,:]
+#     log_msg(f'UPDATE | using random {n_lesions} lesions')
 
 log_msg(f'UPDATE | number of training lesions: {train_lesions.shape[0]}')
 log_msg(f'UPDATE | number of validation lesions: {test_lesions.shape[0]}')
 
 # ---- load template brain ---- #
-template_brain = np.load(os.path.join(Path,'validation','MNI152_T1_32.npy'))
+# template_brain = np.load(os.path.join(Path,'validation','MNI152_T1_32.npy'))
+template_brain = np.load(os.path.join('/data','templates','MNI152_64.npy'))
+
 # template_brain = np.rot90(np.load(os.path.join(Path,'validation','mni_brain_32.npy'))[16,:,:],1)
-template_brain = np.rot90(np.sum(np.load(os.path.join(Path,'validation','mni_brain_32.npy')), axis = 0),1)
+template_brain = np.rot90(np.sum(template_brain, axis = 0),1)
 
 # ---- calculate deficit scores ---- #
+
+
+# ---- training deficits ---- #
 scores_train = dict()
-# noise_levels = [0.1, 0.5, 1.0]
 noise_levels = [0.25]
+# noise_levels = [0.25, 0.5, 0.75]
 
 
 # for net in Networks:
 #     substrate = substrates[net]
 #     log_msg(f'UPDATE | calculating deficits for substrate: {net}')
-#     for deficit_type in deficits_train:
-#         for n in noise_levels:
-#             if deficit_type == 'overlap_ratio_noisy':
-#                 idx = f'{net}-{deficit_type}-{n}'
-#                 scores_train[idx] = get_deficit(train_lesions, substrate, deficit_type, n)
-#             else:
-#                 idx = f'{net}-{deficit_type}'
-#                 scores_train[idx] = get_deficit(train_lesions, substrate, deficit_type, 0.25)
+# for deficit_type in deficits_train:
+#     for n in noise_levels:
+#         if deficit_type == 'overlap_ratio_noisy':
+#             idx = f'{deficit_type}-{n}'
+#             scores_train[idx] = get_deficit(train_lesions, substrate, deficit_type, n)
+#         else:
+#             idx = f'{deficit_type}'
+#             scores_train[idx] = get_deficit(train_lesions, substrate, deficit_type, 0.25)
 
-scores_train['trans'] = get_deficit(train_lesions,substrate, 'trans', 0.25)
+for n in noise_levels:
+    scores_train[deficits_train+str(n)] = get_deficit(train_lesions, substrate, deficits_train, n)
+
+# scores_train[''] = get_deficit(train_lesions,substrate, 'trans', 0.25)
 
 deficits = list(scores_train.keys())
 
+# ---- testing deficits ---- #
+# retaining single substrate for validation
+test_substrate = substrate
+# test_substrate = np.load(os.path.join('/data','substrates/maps', f'Giles_et_al_2013_{test_substrate}_2D.npy'))
 
-test_substrate = np.load(os.path.join('/data','substrates/maps', f'Giles_et_al_2013_{test_substrate}_2D.npy'))
-
-scores_test = get_deficit(test_lesions, test_substrate, deficits_test[0], 0.25)
+scores_test = get_deficit(test_lesions, test_substrate, deficits_test, 0.25)
 
 
-
-# ---- VISUALIZATIONS ---- #
-for net in Networks:
-    substrate = substrates[net]
-    log_msg(f'UPDATE | visualizing substrate: {net}')
-    visualize_inference2D(substrate, substrate, template_brain, out_dir + f'/{net}_overlay.png')
-
-aggregate = np.sum(train_lesions, axis=0)
-visualize_inference2D(aggregate, aggregate, template_brain, out_dir + '/train_lesions_aggregate.png')
-
-aggregate = np.sum(test_lesions, axis=0)
-visualize_inference2D(aggregate, aggregate, template_brain, out_dir + '/test_lesions_aggregate.png')
-
-fig = plt.figure(figsize=(25., 25.))
-grid = ImageGrid(fig, 111, 
-                 nrows_ncols=(2, 5),
-                 axes_pad=0.05,
-                 share_all=True
-                 )
-
-for i in range(10):
-    grid[i].imshow(train_lesions[i])
-
-plt.savefig(out_dir + '/10_train_lesions.png')
-plt.close()
-
-for deficit_type in deficits:
-    plt.hist(scores_train[deficit_type])
-    plt.title(f'histogram of {deficit_type} deficit')
-    plt.savefig(out_dir + f'/{deficit_type}_histogram.png')
-    plt.close()
-
-plt.hist(scores_test)
-plt.title(f'histogram of validation deficit')
-plt.savefig(out_dir + f'/validation_histogram.png')
-plt.close()
 
 #########################################
 #                                       #
@@ -292,6 +279,18 @@ log_msg('UPDATE | using model parameters:')
 for p in model_params.keys():
     log_msg(f'UPDATE | {p}: {model_params[p]}')
 
+
+# ---- select corresponding pretraining model weights ---- #
+
+model_path = get_variable('MODEL_PATH')
+if not model_path: 
+    if model_params['LATENT_SPLIT']==True:
+        model_path = os.path.join('/data','pretrain_10K','recon-vae-weights_ZDIM-20.pth')
+    else:
+        model_path = os.path.join('/data','pretrain_10K','recon-vae-weights_ZDIM-40.pth')
+
+if pretraining:
+    log_msg(f'UPDATE | using pretrained model weights: {model_path}')
 
 #########################################
 #                                       #
@@ -364,11 +363,11 @@ optimizer = optim.Adamax(model.parameters(),
 log_msg('UPDATE | model paramter count: {}'.format(count_parameters(model)))
 
 # ---- set epochs to account for changes in training set ---- #
-repetition_factor = 5
-dataset_reps = 5
-model_params['EPOCHS'] = len(deficits) * repetition_factor * dataset_reps
-p = 'EPOCHS'
-log_msg(f'UPDATE | {p}: {model_params[p]}')
+# repetition_factor = 5
+# dataset_reps = 5
+# model_params['EPOCHS'] = len(deficits) * repetition_factor * dataset_reps
+# p = 'EPOCHS'
+# log_msg(f'UPDATE | {p}: {model_params[p]}')
 
 
 #################################
@@ -437,23 +436,24 @@ dims = train_lesions.shape[2:]
 inference_predictions = np.zeros([model_params['EPOCHS'], *dims])    
 # ---- prepare training sets ---- #
 
-set_order = []
-for i in range(len(deficits)):
-    tmp = list(np.repeat(i,repetition_factor))
-    set_order.append(tmp)
+# set_order = []
+# for i in range(len(deficits)):
+#     tmp = list(np.repeat(i,repetition_factor))
+#     set_order.append(tmp)
 
-set_order = list(np.array(set_order).reshape(-1))
-# training_index = list(np.array(np.array([np.repeat(0, 10), np.repeat(1, 10), np.repeat(2, 10)])).reshape(-1))
-training_index = set_order * dataset_reps
+# set_order = list(np.array(set_order).reshape(-1))
+# # training_index = list(np.array(np.array([np.repeat(0, 10), np.repeat(1, 10), np.repeat(2, 10)])).reshape(-1))
+# training_index = set_order * dataset_reps
 
-# training_index = np.random.permutation(training_index).tolist()
-# int(int(model_params['EPOCHS'] // len(training_sets))/repetition_factor)
+# # training_index = np.random.permutation(training_index).tolist()
+# # int(int(model_params['EPOCHS'] // len(training_sets))/repetition_factor)
 
 
 
 
 for epoch in range(model_params['EPOCHS']):
-    training_set = deficits[training_index[epoch]]
+    # training_set = deficits[training_index[epoch]]
+    training_set = deficits[0]
     model.zero_grad()
     train_acc = 0
     t_epoch_loss = 0
@@ -590,4 +590,8 @@ plt.savefig(out_dir + '/dice_scores.png')
 plt.close()
 
 
+shutil.make_archive(os.path.join('/data', f'{out_dir}'), 'zip', out_dir)
 
+
+
+log_msg("FINISHED | running deep lesion deficit mapping")

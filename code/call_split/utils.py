@@ -197,7 +197,7 @@ def get_deficit(_lesions, _substrate = None, _type = 'overlap_binary',_noise=Non
     elif _type == 'trans':
         from dipy.align.transforms import AffineTransform2D
         from dipy.align.imaffine import AffineRegistration
-        affreg = AffineRegistration()
+        affreg = AffineRegistration(verbosity=0)
         transform = AffineTransform2D()
         with progress.bar.Bar('Processing', max=len(_lesions)) as bar:
             for i in range(len(_lesions)):
