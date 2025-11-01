@@ -21,6 +21,58 @@
 # 3. validation_10K | validation dataset for few-shot training / validation
 ######
 
+
+
+import numpy, nibabel, scipy.ndimage, progress.bar, os, matplotlib.pyplot as plt
+from monai.transforms import Compose, Resize
+
+###################################
+#                                 #
+#      PREPARE STROKE MASKS       #
+#                                 #
+###################################
+
+
+
+# mni_1mm = nibabel.load('/mnt/h/DLDM/3D/templates/icbm_avg_152_t1_tal_nlin_symmetric_VI.nii')
+# mni_64 = resize(mni_1mm.get_fdata(), (64,64,64)).astype(numpy.int32)
+# # nibabel.save(nibabel.Nifti1Image(mni_64, numpy.eye(4)), '/mnt/h/DLDM/3D/templates/MNI152_64.nii.gz')
+
+# mni_1mm_mask = nibabel.load('/mnt/h/DLDM/3D/templates/icbm_avg_152_t1_tal_nlin_symmetric_VI_mask.nii')
+# mni_64_mask = resize(mni_1mm_mask.get_fdata(), (64,64,64)).astype(numpy.int32)
+# nibabel.save(nibabel.Nifti1Image(mni_64_mask, numpy.eye(4)), '/mnt/h/DLDM/3D/templates/MNI152_64_mask.nii.gz')
+
+# mni_64_brain = mni_64 * mni_64_mask
+# nibabel.save(nibabel.Nifti1Image(mni_64_brain, numpy.eye(4)), '/mnt/h/DLDM/3D/templates/MNI152_64_brain.nii.gz')
+
+
+
+Path = '/mnt/h/DLDM/3D/'
+mask_files = [ f for f in os.listdir(os.path.join(Path,'Ischaemic')) if f.endswith('.nii.gz')]
+lesions = numpy.zeros([len(mask_files), 64,64,64])
+mni_brain = nibabel.load(os.path.join(Path,'templates','MNI152_64_brain.nii.gz')).get_fdata()
+mni_bin = numpy.where(mni_brain>0,1,0).astype(numpy.int32)
+with progress.bar.Bar(f'creating lesion masks', max = len(mask_files)) as bar:
+    for m in mask_files:
+        mask = nibabel.load(os.path.join(Path,'Ischaemic',m)).get_fdata()
+        res_mask = numpy.where(resize(mask, (64,64,64))>0,1,0).astype(numpy.int32)
+        res_mask_act = res_mask * mni_bin
+        if res_mask_act.sum() == 0:
+            print(f"Empty mask found: {m}")
+            continue
+        lesions[mask_files.index(m),:,:,:] = res_mask_act
+        bar.next()
+
+
+numpy.save(os.path.join(Path, 'Ischaemic_lesions_3D.npy'), lesions)
+
+
+
+
+la = numpy.sum(lesions, axis = 0)
+nibabel.save(nibabel.Nifti1Image(la, numpy.eye(4)), os.path.join(Path, f'Ischaemic_lesion_aggregate.nii.gz'))
+
+
 ###################################
 #                                 #
 #         LOAD LIBRARIES          #
@@ -29,6 +81,11 @@
 
 
 import os, numpy, nibabel, matplotlib.pyplot as plt, scipy.ndimage, progress.bar
+
+
+
+
+
 ###################################
 #                                 #
 #         FUNCTIONS               #
@@ -233,6 +290,10 @@ for l in range(10):
 import numpy, nibabel, scipy.ndimage, progress.bar, os, matplotlib.pyplot as plt
 from monai.transforms import Compose, Resize
 
+
+
+
+
 # def random_blob(shape=(32,32,32), min_points=1, max_points=5, max_radius=5):
 #     arr = numpy.zeros(shape)
 #     # Randomly choose number of seed points
@@ -320,6 +381,36 @@ def adjust_shape(blob):
         return(out)
     else:
         return(blob)
+
+
+
+
+Path = '/mnt/h/DLDM/3D/'
+
+brain_rs = numpy.load(os.path.join(Path,'templates','MNI152_64.npy'))
+
+
+blob = random_blob(brain_rs.shape)
+            
+
+
+            # updated_blob = adjust_shape(blob)
+            # tmp = brain_rs * updated_blob
+tmp = brain_rs * blob
+nibabel.save(nibabel.Nifti1Image(tmp, numpy.eye(4)), os.path.join(Path, f'test_lesion.nii.gz'))
+
+updated_blob = adjust_shape(blob)
+tmp = brain_rs * updated_blob
+nibabel.save(nibabel.Nifti1Image(tmp, numpy.eye(4)), os.path.join(Path, f'test_lesion_adjust.nii.gz'))
+
+mask = numpy.where(tmp > numpy.quantile(tmp[tmp>0], 0.25), 1, 0).astype(float)
+if mask.sum() > 10:
+    masks[idx,:,:,:] = mask
+    idx+=1
+    if idx % 1000 == 0:
+        nii = nibabel.Nifti1Image(mask, numpy.eye(4))
+        nibabel.save(nii, os.path.join(Path, f'new_lesion_{1}.nii.gz'))
+    bar.next()
 
 
 # # template_brain = numpy.load(os.path.join(Path,'MNI152_T1_32.npy'))

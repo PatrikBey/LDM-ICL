@@ -84,8 +84,9 @@ def adjust_shape(blob):
 Path='/data'
 
 
-
-brain_rs = numpy.load(os.path.join('/data/templates','MNI152_64.npy'))
+brain_nii = nibabel.load(os.path.join('/data/templates','MNI152_64.nii.gz'))
+brain_rs = brain_nii.get_fdata()
+# brain_rs = numpy.load(os.path.join('/data/templates','MNI152_64.npy'))
 
 # ---- create 3D lesion masks ---- #
 
@@ -122,19 +123,19 @@ with progress.bar.Bar(f'creating lesion masks', max = n_masks) as bar:
 
 
 # ---- save reconstruction pretraining masks ---- #
-numpy.save(os.path.join(Path,'pretrain-recon_10K.npy'), masks[:10000,:,:,:])
+numpy.save(os.path.join(Path,'pretrain-recon_10K.npy'), masks[:10000,:,:,:].astype(numpy.int32))
 
 # ---- save in-context learning pretraining masks ---- #
-numpy.save(os.path.join(Path,'pretrain-tune_5K.npy'), masks[10000:15000,:,:,:])
+numpy.save(os.path.join(Path,'pretrain-tune_5K.npy'), masks[10000:15000,:,:,:].astype(numpy.int32))
 
 # ---- save fine-tuning masks ---- #
-numpy.save(os.path.join(Path,'predict_5K.npy'), masks[15000:,:,:,:])
+numpy.save(os.path.join(Path,'predict_5K.npy'), masks[15000:,:,:,:].astype(numpy.int32))
 
 
 
 # ---- CREATE 2D MASKS ---- #
 
-Path='/data/lesions'
+Path='/data'
 
 masks = os.listdir(Path)
 

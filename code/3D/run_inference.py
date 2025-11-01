@@ -28,7 +28,7 @@ import torch as tc
 # ---- import model classes ---- #
 os.chdir('call_split')
 from model import *
-from utils import log_msg, get_variable, get_device, DeficitDataset, visualize_inference2D, count_parameters, vec_dice, dice_2D, get_deficit
+from utils import log_msg, get_variable, get_device, DeficitDataset, visualize_inference3D, count_parameters, vec_dice, dice_3D, get_deficit
 
 log_msg("START | running deep lesion deficit mapping")
 
@@ -53,7 +53,7 @@ if n_lesions:
 
 out_dir = get_variable('OUTDIR')
 if not out_dir:
-    out_dir = '/data/out_dir'
+    out_dir = '/data/out_dir_3Dtest'
 else:
     out_dir = os.path.join('/data', out_dir)
 
@@ -121,7 +121,7 @@ if not substrate_type:
 
 # substrate = np.load(os.path.join(Path,'validation',substrate_type))
 substrate = np.load(os.path.join('/data','substrates',substrate_type))
-substrate = np.rot90(np.sum(substrate, axis = 0),1)
+# substrate = np.rot90(np.sum(substrate, axis = 0),1)
 substrate = np.where(substrate>0,1,0)
 # ---- multiple NQ based substrates ---- #
 
@@ -582,7 +582,7 @@ np.save(os.path.join(out_dir, f'dice_inference.npy'), inference_dice)
 
 # ---- substrate predictions ---- #
 for th in [0.25,0.5,0.75,0.9,0.95]:
-    tmp = inference_predictions[epoch,:,:]
+    tmp = inference_predictions[epoch,:,:,:]  # Updated for 3D
     testing = np.where(tmp>np.quantile(tmp,th),1,0)
     visualize_inference2D(test_substrate, testing, template_brain, os.path.join(out_dir, f'Inference_threshold_{th}.png'))
 
