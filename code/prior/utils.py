@@ -2,7 +2,7 @@
 
 #########################
 #                       #
-#      UTILITIES  #
+#      UTILITIES        #
 #                       #
 #########################
 
@@ -13,8 +13,6 @@ def get_variable(_string):
     '''
     import os
     return(os.getenv(_string))
-
-
 
 def get_device():
     '''
@@ -55,16 +53,6 @@ def resize(volume, target_size=(64,64,64)):
 
 from torch.utils.data import Dataset  
 
-# class DeficitDataset(Dataset):
-#     def __init__(self, data, labels):
-#         self.data = data
-#         self.labels = labels
-#     def __len__(self):
-#         return len(self.data)
-#     def __getitem__(self, index):
-#         import numpy
-#         img = self.data[index]
-#         return img, numpy.expand_dims(self.labels[index], axis=0)
 
 
 class LesionDataset(Dataset):
@@ -85,11 +73,18 @@ class LesionDataset(Dataset):
         
 
 
-#########################
-#                       #
-#    MASK MEASURES      #
-#                       #
-#########################
+
+def sample_latent_masks(model, num_samples=10):
+    '''
+    sample synthetic lesion masks from 
+    latent representation to create prior samples
+    '''
+    import torch
+    Tensor = torch.cuda.FloatTensor
+    z = torch.randn(num_samples, model.z_dim).type(Tensor)
+    preds = model.mask_model.rdecoder(z)
+    return(preds)
+
 
 
 #########################
@@ -98,44 +93,6 @@ class LesionDataset(Dataset):
 #                       #
 #########################
 
-# def visualize_inference3D(gt, rec, template, filename='/data/gt_overlay.png', slice_axis=2, slice_idx=None):
-#     '''
-#     visualize overlay of ground truth neural substrate with inferred reconstruction for 3D data
-#     Shows a 2D slice of the 3D volume for visualization
-#     :param gt: ground truth 3D array
-#     :param rec: reconstructed 3D array  
-#     :param template: template 3D brain array
-#     :param filename: output filename
-#     :param slice_axis: axis along which to slice (0=sagittal, 1=coronal, 2=axial)
-#     :param slice_idx: specific slice index, if None uses middle slice
-#     '''
-#     import numpy, matplotlib.pyplot as plt
-    
-#     # Select middle slice if not specified
-#     if slice_idx is None:
-#         slice_idx = template.shape[slice_axis] // 2
-    
-#     # Extract 2D slices based on axis
-#     if slice_axis == 0:  # sagittal
-#         template_slice = template[slice_idx, :, :]
-#         gt_slice = gt[slice_idx, :, :] if len(gt.shape) == 3 else gt
-#         rec_slice = rec[slice_idx, :, :] if len(rec.shape) == 3 else rec
-#     elif slice_axis == 1:  # coronal
-#         template_slice = template[:, slice_idx, :]
-#         gt_slice = gt[:, slice_idx, :] if len(gt.shape) == 3 else gt
-#         rec_slice = rec[:, slice_idx, :] if len(rec.shape) == 3 else rec
-#     else:  # axial (default)
-#         template_slice = template[:, :, slice_idx]
-#         gt_slice = gt[:, :, slice_idx] if len(gt.shape) == 3 else gt
-#         rec_slice = rec[:, :, slice_idx] if len(rec.shape) == 3 else rec
-    
-#     plt.imshow(template_slice, cmap='gray')
-#     plt.imshow(numpy.where(gt_slice > 0, 1, numpy.nan), cmap='hot')
-#     plt.imshow(rec_slice, cmap='plasma', alpha=0.5)
-#     plt.colorbar()
-#     plt.title(f'3D Inference Visualization - Slice {slice_idx} (axis {slice_axis})')
-#     plt.savefig(filename)
-#     plt.close()
 
 def visualize_inference3D(gt, rec, template, filename='/data/gt_overlay.png', ):
     '''
@@ -324,73 +281,4 @@ def get_deficit(_lesions, _substrate = None, _type = 'overlap_binary',_noise=Non
         deficits = numpy.array(deficits)
         deficits = deficits / numpy.max(deficits)
         return numpy.array(deficits)
-
-
-# def get_deficit(_lesions, _substrate = None, _type = 'overlap_binary',_noise=None):
-#     '''
-#     return deficit scores for various computation types
-#     '''
-#     import numpy, scipy.ndimage
-#     deficits = []
-#     if _type == 'overlap_binary':
-#         for i in range(len(_lesions)):
-#             overlap = _lesions[i] * _substrate
-#             counts = numpy.count_nonzero(overlap)
-#             voxels_gt = numpy.sum(_substrate)
-#             ratio_lesion = counts / voxels_gt
-#             # using minimal overlap ratio of 5%
-#             if ratio_lesion > 0.05:
-#                 deficits.append(1)
-#             else:
-#                 deficits.append(0)
-#         return numpy.array(deficits)
-#     elif _type == 'overlap_ratio':
-#         for i in range(len(_lesions)):
-#             overlap = _lesions[i] * _substrate
-#             counts = numpy.count_nonzero(overlap)
-#             if counts > 0:
-#                 voxels_mask = numpy.sum(_lesions[i])
-#                 ratio_lesion = counts / voxels_mask
-#                 deficits.append(ratio_lesion)
-#             else:
-#                 deficits.append(0)
-#         return numpy.array(deficits)
-#     elif _type == 'overlap_ratio_noisy':
-#         for i in range(len(_lesions)):
-#             overlap = _lesions[i] * _substrate
-#             counts = numpy.count_nonzero(overlap)
-#             if counts > 0:
-#                 voxels_mask = numpy.sum(_lesions[i])
-#                 ratio_lesion = counts / voxels_mask
-#                 noise = numpy.random.normal(0, _noise)
-#                 out = ratio_lesion+noise
-#                 if out > 0:
-#                     deficits.append(out)
-#                 else:
-#                     deficits.append(0)
-#             else:
-#                 deficits.append(0)
-#         return numpy.array(deficits)
-#     elif _type == 'distance':
-#         lbl = scipy.ndimage.label(_substrate)[0]
-#         groups = numpy.unique(lbl)
-#         gtcog = numpy.array(scipy.ndimage.center_of_mass(_substrate, lbl, [groups[1:]]))
-#         for l in range(len(_lesions)):
-#             dist = []
-#             tmp = _lesions[l,:,:]
-#             for i in groups[1:]:
-#                 dist.append(numpy.linalg.norm(gtcog[i-1] - numpy.array(scipy.ndimage.center_of_mass(tmp))))
-#             deficits.append(numpy.min(dist))
-#         deficits = numpy.array(deficits)
-#         deficits = deficits / numpy.max(deficits)
-#         return numpy.array(deficits)
-#     elif _type == 'size':
-#         gt_size = numpy.sum(_substrate)
-#         for i in range(len(_lesions)):
-#             voxels_mask = numpy.sum(_lesions[i])
-#             deficits.append(voxels_mask/gt_size)
-#         deficits = numpy.array(deficits)
-#         deficits = deficits / numpy.max(deficits)
-#         return numpy.array(deficits)
-
 

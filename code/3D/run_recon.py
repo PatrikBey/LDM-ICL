@@ -6,7 +6,6 @@
 #
 
 
-from fileinput import filename
 import scipy.io, os, json
 import numpy as np
 import matplotlib.pyplot as plt
@@ -217,6 +216,18 @@ with torch.no_grad():
 
 validation_losses.append(ret_dict['loss'].mean().item())
 
+with torch.no_grad():
+    for x in train_loader:
+        x = x.type(Tensor).to(device)
+        ret_dict = model(x)
+        loss_acc += ret_dict['loss'].mean().item()
+        val_acc += 1
+        kld_acc += ret_dict['kl'].item()
+        recon_acc += ret_dict['recon_ll'].item()
+
+training_losses.append(ret_dict['loss'].mean().item())
+
+
 for epoch in range(EPOCHS):
     model.zero_grad()
     train_acc = 0
@@ -269,13 +280,29 @@ for epoch in range(EPOCHS):
         visualize_inference3D(mask, recon, mni_brain, os.path.join(out_dir,f'reconstruction-val-epoch_{epoch}.png') )
 
 
-plt.plot(training_losses, label='training loss')
-plt.plot(validation_losses, label='validation loss')
+plt.plot(np.log(training_losses), label='training loss')
+plt.plot(np.log(validation_losses), label='validation loss')
 plt.xlabel('Epochs')
-plt.ylabel('Loss')
+plt.ylabel('Log-loss')
 plt.legend()
 plt.savefig(os.path.join(out_dir,'loss_curve.png'))
 plt.close()
 
 
-log_msg('FINISHED | Running Deep Variational Lesion Reconstruction')
+for th in [0.25,0.5,0.75,0.9,0.95,0.975,0.99]:
+    tmp = ret_dict['lesion_recon'].cpu().data.numpy()[10,:,:,:].reshape(dims)
+    testing = np.where(tmp>np.quantile(tmp,th),1,0)
+    visualize_inference3D(mask, testing, mni_brain, os.path.join(out_dir, f'Reconstruction_threshold_{th}.png'))
+
+
+
+# visualize_inference3D(mask, recon, mni_brain, os.path.join(out_dir,f'reconstruction-val-final.png') )
+
+# log_msg('FINISHED | Running Deep Variational Lesion Reconstruction')
+
+# for th in [0.25,0.5,0.75,0.9,0.95,0.975,0.99]:
+#     tmp = ret_dict['lesion_recon'].cpu().data.numpy()[10,:,:,:].reshape(dims)
+#     testing = np.where(tmp>np.quantile(tmp,th),1,0)
+#     dice_3D(mask,testing)
+
+

@@ -584,7 +584,7 @@ np.save(os.path.join(out_dir, f'dice_inference.npy'), inference_dice)
 for th in [0.25,0.5,0.75,0.9,0.95]:
     tmp = inference_predictions[epoch,:,:,:]  # Updated for 3D
     testing = np.where(tmp>np.quantile(tmp,th),1,0)
-    visualize_inference2D(test_substrate, testing, template_brain, os.path.join(out_dir, f'Inference_threshold_{th}.png'))
+    visualize_inference#D(test_substrate, testing, template_brain, os.path.join(out_dir, f'Inference_threshold_{th}.png'))
 
 
 # ---- training / testing performance ---- #
