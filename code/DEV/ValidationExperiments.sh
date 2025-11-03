@@ -47,7 +47,7 @@ Path="/home/pbey/data"
 # # Path="/home/patrik/Data/LDM"
 # Path="/mnt/h/DLDM/VALIDATION/LDM"
 
-docker run -it --gpus device=0 -v $Path:/data patrikneuro/dldm:dev python
+docker run -it --gpus device=0 -v $PWD:/data patrikneuro/dldm:dev python
 
 
 # ---- INFERENCE FINETUNING ---- #

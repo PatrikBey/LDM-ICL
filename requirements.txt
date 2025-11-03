@@ -9,3 +9,4 @@ lolcat
 monai
 dipy
 shutils
+scikit-image

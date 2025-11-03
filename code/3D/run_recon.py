@@ -21,9 +21,9 @@ import torch.optim as optim
 import shutil
 import torch as tc
 
+os.chdir('3D')
 from model import *
-from utils import log_msg, get_variable, get_device, DeficitDataset, visualize_inference3D, count_parameters, vec_dice, get_deficit
-
+from utils import log_msg, get_variable, get_device, LesionDataset, visualize_inference3D, count_parameters
 
 #########################################
 #                                       #
@@ -33,7 +33,7 @@ from utils import log_msg, get_variable, get_device, DeficitDataset, visualize_i
 
 log_msg('START | Running Deep Variational Lesion Reconstruction')
 
-TEMPLATEDIR=os.getenv("TEMPLATEDIR")
+# TEMPLATEDIR=os.getenv("TEMPLATEDIR")
 
 Path='/data'
 # Path='/mnt/h/DLDM/3D'
@@ -47,8 +47,8 @@ else:
 
 
 # ---- load lesion masks ---- #
-# lesions= np.load(os.path.join(Path,'lesions','pretrain-recon-10K.npy')).astype(np.int32)
-lesions= np.load(os.path.join(Path,'lesions','Ischaemic_lesions_3D.npy')).astype(np.int32)
+lesions= np.load(os.path.join(Path,'lesions','Synthetic-masks-recon-10K.npy')).astype(np.int32)
+# lesions= np.load(os.path.join(Path,'lesions','Ischaemic_lesions_3D.npy')).astype(np.int32)
 
 # --- ensure lesion masks are binary --- #
 if len(np.unique(lesions)) > 2:

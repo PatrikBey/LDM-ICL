@@ -22,6 +22,7 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
 
+os.chdir('prior')
 from model import *
 from utils import *
 # log_msg, get_variable, get_device, LesionDataset, visualize_inference3D, count_parameters, vec_dice, get_deficit
@@ -36,7 +37,10 @@ device = get_device()
 #########################################
 
 Path = '/mnt/h/DLDM/3D'
-MODEL_PATH=os.path.join(Path, 'pretrain-recon', 'recon_vae.pth')
+# Path='/data'
+# MODEL_PATH=os.path.join(Path, 'pretrain-recon', 'recon_vae.pth')
+MODEL_PATH=os.path.join(Path, 'pretrain_10K', 'recon_vae.pth')
+
 
 OUT_DIR = os.path.join(Path, 'lesions')
 
@@ -91,28 +95,31 @@ log_msg('UPDATE | model parameter count: {}'.format(count_parameters(model)))
 #                                #
 ##################################
 
-# N = 500
-# RUNS = 40
-# with progress.bar.Bar('Processing', max=N*RUNS) as bar:
-#     for run in range(RUNS):
-#         initial_masks = sample_latent_masks(model, num_samples=N)
-#         masks = np.zeros(initial_masks.shape)
-#         for i in range(N):
-#             tmp = initial_masks[i].reshape(DIMS).cpu().data.numpy().astype(int)
-#             tmp = np.where(tmp>=np.quantile(tmp,0.995),1,0)
-#             tmp = tmp * mni_brain_mask
-#             img = measure.label(tmp, background=0)
-#             props = measure.regionprops(img)
-#             if len(props)>1:
-#                 chance = np.random.rand()
-#                 if chance>0.5:
-#                     clusters = np.random.randint(0,len(props))
-#                     mask = np.where(np.logical_and(img>0,img<=clusters+1),1,0 )
-#             else:
-#                 mask = tmp
-#             masks[i,0,:,:,:] = mask
-#             bar.next()
-#         np.save(os.path.join(OUT_DIR, f'Synthetic_lesion_masks_3D_{run}.npy'), masks.astype(np.int32))
+N = 500
+RUNS = 40
+
+with progress.bar.Bar('Processing', max=N*RUNS) as bar:
+    for run in range(RUNS):
+        initial_masks = sample_latent_masks(model, num_samples=N)
+        masks = np.zeros(initial_masks.shape)
+        for i in range(N):
+            tmp = initial_masks[i].reshape(DIMS).cpu().data.numpy().astype(int)
+            tmp = np.where(tmp>=np.quantile(tmp,0.9995),1,0)
+            tmp = tmp * mni_brain_mask
+            img = measure.label(tmp, background=0)
+            props = measure.regionprops(img)
+            if len(props)>1:
+                chance = np.random.rand()
+                if chance>0.5:
+                    clusters = np.random.randint(0,len(props))
+                    mask = np.where(np.logical_and(img>0,img<=clusters+1),1,0 )
+                else:
+                    mask = tmp
+            else:
+                mask = tmp
+            masks[i,0,:,:,:] = mask
+            bar.next()
+        np.save(os.path.join(OUT_DIR, f'Synthetic_lesion_masks_3D_{run}.npy'), masks.astype(np.int32))
 
 
 
@@ -121,17 +128,23 @@ log_msg('UPDATE | model parameter count: {}'.format(count_parameters(model)))
 #     nibabel.save(nibabel.Nifti1Image(tmp.astype(np.float32), np.eye(4)), os.path.join(OUT_DIR, f'synthetic_lesion_{i}.nii.gz'))
 
 
-RUNS = 40
-lesions = np.zeros([20000,1, 64,64,64], dtype=np.int32)
+# ---- aggregate all lesions ---- #
+lesions = np.zeros([N*RUNS,1, 64,64,64], dtype=np.int32)
 
 with progress.bar.Bar('Processing', max=RUNS) as bar:
     for run in range(RUNS):
         tmp = np.load(os.path.join(OUT_DIR, f'Synthetic_lesion_masks_3D_{run}.npy'), allow_pickle=True)
-        lesions[run*500:(run+1)*500,:,:,:,:] = tmp
+        lesions[run*N:(run+1)*N,:,:,:,:] = tmp
         bar.next()
 
 
-np.save(os.path.join(OUT_DIR, f'Synthetic_lesions_3D.npy'), lesions)
+np.save(os.path.join(OUT_DIR, f'Synthetic_lesions_3D_20K.npy'), lesions)
+
+# ---- visualize aggregated lesions ---- #
+agg_lesion = np.sum(lesions, axis=0).reshape(DIMS)
+
+nibabel.save(nibabel.Nifti1Image(agg_lesion.astype(np.float32), np.eye(4)), os.path.join(OUT_DIR, f'Aggregated_synthetic_lesion.nii.gz'))
+visualize_inference3D(agg_lesion, agg_lesion,mni_brain, os.path.join(OUT_DIR, 'Aggregated_synthetic_lesion.png'))
 
 
 ##################################
@@ -140,35 +153,47 @@ np.save(os.path.join(OUT_DIR, f'Synthetic_lesions_3D.npy'), lesions)
 #                                #
 ##################################
 
-lesions = np.load(os.path.join(OUT_DIR, 'Ischaemic_lesions_3D.npy')).astype(np.int32)
+
 
 metrics = ['area','equivalent_diameter_area', 'axis_major_length', 'axis_minor_length', 'euler_number','extent']
 
-# ---- MEASURES FOR REAL LESIONS ---- #
-MEASURES = np.zeros([lesions.shape[0], len(metrics)+1])
-with progress.bar.Bar('Processing', max=lesions.shape[0]) as bar:
-    for i in range(lesions.shape[0]):
-        tmp = lesions[i,:,:,:]
-        try:
-            props = measure.regionprops_table(tmp,properties=metrics)
-            props = np.array([props[m][0] for m in metrics])
-            MEASURES[i, :6] = props
-            img=measure.label(tmp, background=0)
-            props = measure.regionprops(img)
-            MEASURES[i, 6] = len(props)
-        except:
-            MEASURES[i, :] = np.zeros(len(metrics)+1)
-        bar.next()
+# # ---- MEASURES FOR REAL LESIONS ---- #
+
+# lesions = np.load(os.path.join(OUT_DIR, 'Ischaemic_lesions_3D.npy')).astype(np.int32)
 
 
-# ---- clean measures ---- #
-check = np.sum(MEASURES, axis=1)
-MEASURES_clean = MEASURES[check>0,:]
+# MEASURES = np.zeros([lesions.shape[0], len(metrics)+1])
+# with progress.bar.Bar('Processing', max=lesions.shape[0]) as bar:
+#     for i in range(lesions.shape[0]):
+#         tmp = lesions[i,:,:,:]
+#         try:
+#             props = measure.regionprops_table(tmp,properties=metrics)
+#             props = np.array([props[m][0] for m in metrics])
+#             MEASURES[i, :6] = props
+#             img=measure.label(tmp, background=0)
+#             props = measure.regionprops(img)
+#             MEASURES[i, 6] = len(props)
+#         except:
+#             MEASURES[i, :] = np.zeros(len(metrics)+1)
+#         bar.next()
 
-np.save(os.path.join(OUT_DIR, 'Ischaemic_lesion_measures.npy'), MEASURES_clean)
+
+# # ---- clean measures ---- #
+# check = np.sum(MEASURES, axis=1)
+# MEASURES_clean = MEASURES[check>0,:]
+
+# np.save(os.path.join(OUT_DIR, 'Ischaemic_lesion_measures.npy'), MEASURES_clean)
+
+# # ---- visualize aggregated lesions ---- #
+# agg_lesion = np.sum(lesions, axis=0).reshape(DIMS)
+
+# nibabel.save(nibabel.Nifti1Image(agg_lesion.astype(np.float32), np.eye(4)), os.path.join(OUT_DIR, f'Aggregated_ischaemic_lesion.nii.gz'))
+# visualize_inference3D(agg_lesion, agg_lesion,mni_brain, os.path.join(OUT_DIR, 'Aggregated_ischaemic_lesion.png'))
 
 
 # ---- MEASURES FOR SYNTHETIC LESIONS ---- #
+
+lesions = np.load(os.path.join(OUT_DIR, 'Synthetic_lesions_3D_5K.npy')).astype(np.int32)
 
 
 MEASURES = np.zeros([lesions.shape[0], len(metrics)+1])
@@ -217,23 +242,23 @@ x = StandardScaler().fit_transform(all_measures)
 #     plt.title(metrics[m])
 
 
-tsne = TSNE(n_components=2, random_state=42, perplexity=50, max_iter=1000)
-tsne_results = tsne.fit_transform(x)
+# tsne = TSNE(n_components=2, random_state=42, perplexity=50, max_iter=1000)
+# tsne_results = tsne.fit_transform(x)
 
 
-X_embedded_min = np.min(tsne_results, axis=0)
-X_embedded_max = np.max(tsne_results, axis=0)
-X_embedded = 200 * (tsne_results - X_embedded_min) / (X_embedded_max - X_embedded_min)
+# X_embedded_min = np.min(tsne_results, axis=0)
+# X_embedded_max = np.max(tsne_results, axis=0)
+# X_embedded = 200 * (tsne_results - X_embedded_min) / (X_embedded_max - X_embedded_min)
 
 
 
-real_tsne = X_embedded[:4944,:]
-synth_tsne = X_embedded[4944:,:]
+# real_tsne = X_embedded[:4944,:]
+# synth_tsne = X_embedded[4944:,:]
 
-real_mapping = np.zeros([201,201])
-for i in range(real_tsne.shape[0]):
-    tmp = real_tsne[i,:]
-    real_mapping[tmp[0].astype(int), tmp[1].astype(int)] += 1 
+# real_mapping = np.zeros([201,201])
+# for i in range(real_tsne.shape[0]):
+#     tmp = real_tsne[i,:]
+#     real_mapping[tmp[0].astype(int), tmp[1].astype(int)] += 1 
 
 
 # real_smooth = ndimage.gaussian_filter(real_mapping, sigma=2)
@@ -256,18 +281,18 @@ for i in range(7):
 
 plt.legend()
 plt.tight_layout()
-plt.savefig(os.path.join(OUT_DIR, 'measure_scatterplots.png'))
+plt.savefig(os.path.join(OUT_DIR, 'Lesion_Measures_Scatter.png'))
 plt.close()
 
 
 
 for i in range(7):
     plt.subplot(2,4,i+1)
-    plt.hist(synth_measures[:, i], bins=30, color='mediumvioletred', alpha=0.5, label='Synthetic lesions')
-    plt.hist(real_measures[:, i], bins=30, color='gold', alpha=0.5, label='Real lesions')
+    plt.hist(synth_measures[:, i], bins=30, density=True, color='mediumvioletred', alpha=0.5, label='Synthetic lesions')
+    plt.hist(real_measures[:, i], bins=30, density=True, color='gold', alpha=0.5, label='Real lesions')
     plt.xlabel(metrics[i])
-    plt.ylabel('Count')
+    plt.ylabel('Density')
 
 plt.legend()
-
+plt.suptitle('Measure distributions for synthetic and real lesions')
 plt.show()
