@@ -40,7 +40,7 @@ Path='/data'
 
 # ---- set output directory ---- #
 if os.path.isdir('/data'):
-    out_dir = Path+'/pretrain_10K'
+    out_dir = Path+'/pre-recon'
     os.makedirs(out_dir, exist_ok=True)
 else:
     out_dir = Path
@@ -61,8 +61,6 @@ aggregate = np.sum(lesions, axis=0)
 # nibabel.save(nibabel.Nifti1Image(aggregate.astype(np.float32), np.eye(4)), out_dir+'/lesions_aggregate.nii.gz')
 
 mni_brain = nibabel.load(os.path.join(Path,'templates','MNI152_64_brain.nii.gz')).get_fdata()
-
-
 
 visualize_inference3D(aggregate, aggregate, mni_brain, out_dir + '/lesions_aggregate.png')
 
@@ -271,7 +269,7 @@ for epoch in range(EPOCHS):
         best_acc = acc
         best_recon = recon_acc
         best_epoch = epoch
-        torch.save(model.state_dict(), os.path.join(out_dir,'recon_vae.pth'))
+        torch.save(model.state_dict(), os.path.join(out_dir,'pre-recon_vae.pth'))
         # log_msg(f'UPDATE | Saving current model')
     if epoch % 10 == 0:
         log_msg(f'UPDATE | Best: {best_loss}, epoch: {best_epoch}')
@@ -292,6 +290,7 @@ plt.close()
 for th in [0.25,0.5,0.75,0.9,0.95,0.975,0.99]:
     tmp = ret_dict['lesion_recon'].cpu().data.numpy()[10,:,:,:].reshape(dims)
     testing = np.where(tmp>np.quantile(tmp,th),1,0)
+    mask = x.cpu().data.numpy()[10,:,:,:].reshape(dims)
     visualize_inference3D(mask, testing, mni_brain, os.path.join(out_dir, f'Reconstruction_threshold_{th}.png'))
 
 

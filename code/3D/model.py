@@ -145,7 +145,7 @@ class VAE(nn.Module):
                 enc_sd *= 2
         # These are the dimensions of a fully connected latent at the end of the encoder
         self.spatial_dims = input_size // (2 ** self.num_layers)
-        self.dense_dims = self.spatial_dims ** 2 * (enc_sd)
+        self.dense_dims = self.spatial_dims ** 3 * (enc_sd)
         '''
         Parameters of the latent space
         '''
@@ -225,7 +225,7 @@ class VAE(nn.Module):
 
 
 class ModelWrapper(nn.Module):
-    def __init__(self, input_size, z_dim=128, start_dims=16, continuous=False, aci = True, latent_split = True, template = None):
+    def __init__(self, input_size, z_dim=128, start_dims=16, continuous=False, aci = False, latent_split = True, template = None):
         '''
         A model wrapper around the VAE
         :param input_size:

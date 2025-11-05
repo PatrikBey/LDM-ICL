@@ -73,7 +73,6 @@ class LesionDataset(Dataset):
         
 
 
-
 def sample_latent_masks(model, num_samples=10):
     '''
     sample synthetic lesion masks from 

@@ -55,16 +55,16 @@ def resize(volume, target_size=(64,64,64)):
 
 from torch.utils.data import Dataset  
 
-# class DeficitDataset(Dataset):
-#     def __init__(self, data, labels):
-#         self.data = data
-#         self.labels = labels
-#     def __len__(self):
-#         return len(self.data)
-#     def __getitem__(self, index):
-#         import numpy
-#         img = self.data[index]
-#         return img, numpy.expand_dims(self.labels[index], axis=0)
+class DeficitDataset(Dataset):
+    def __init__(self, data, labels):
+        self.data = data
+        self.labels = labels
+    def __len__(self):
+        return len(self.data)
+    def __getitem__(self, index):
+        import numpy
+        img = self.data[index]
+        return img, numpy.expand_dims(self.labels[index], axis=0)
 
 
 class LesionDataset(Dataset):
@@ -240,7 +240,7 @@ def get_deficit(_lesions, _substrate = None, _type = 'overlap_binary',_noise=Non
     '''
     import numpy, scipy.ndimage, progress.bar
     deficits = []
-    if _type == 'overlap_binary':
+    if _type == 'overlap-binary':
         with progress.bar.Bar('Processing', max=len(_lesions)) as bar:
             for i in range(len(_lesions)):
                 overlap = _lesions[i] * _substrate
@@ -254,7 +254,7 @@ def get_deficit(_lesions, _substrate = None, _type = 'overlap_binary',_noise=Non
                     deficits.append(0)
                 bar.next()
         return numpy.array(deficits)
-    elif _type == 'overlap_ratio':
+    elif _type == 'overlap-ratio':
         with progress.bar.Bar('Processing', max=len(_lesions)) as bar:
             for i in range(len(_lesions)):
                 overlap = _lesions[i] * _substrate
@@ -267,7 +267,7 @@ def get_deficit(_lesions, _substrate = None, _type = 'overlap_binary',_noise=Non
                     deficits.append(0)
                 bar.next()
         return numpy.array(deficits)
-    elif _type == 'overlap_ratio_noisy':
+    elif _type == 'overlap-ratio-noisy':
         with progress.bar.Bar('Processing', max=len(_lesions)) as bar:
             for i in range(len(_lesions)):
                 overlap = _lesions[i] * _substrate

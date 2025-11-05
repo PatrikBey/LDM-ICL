@@ -1,32 +1,39 @@
-#
-#
-#
-# This script runs the initial in-context learning 
-# deep lesion deficit mapping experiments
-#
-# The initial set up focuses on extracting complex lesion-deficit behaviour relationships
-# The approach entails:
-# 1. pretraining the model using simple behaviour relationships (lesion overlap, size-ratio)
-# 2. fine-tuning the model using complex behaviour relationships (center of gravity distance)
+#########################################################################
+#                                      ###     ###    #######   ###     #
+#                                      ###     ###   ###        ###     #
+#                                      ###     ###   ###        ###     #
+#                                      ###     ###   ###        ###     #
+#                                       #########     #######   #########
+#                                                                       #
+# DEEP LESION DEFICIT MAPPING | FINE-TUNING                             #
+#                                                                       #
+# This script performs the second stage of deep lesion deficit mapping  #
+# by fine-tuning the DLDM model after reconstruction pretraining.       #
+#                                                                       #
+# Author: Patrik Bey, patrik.bey@ucl.ac.uk                              #
+#                                                                       #
+# last update: 2025/11/03                                               #
+#                                                                       #
+# INPUT:                                                                #
+#  - lesion masks | pre-tune-5K.npy                                     #
+#  - substrate   | AAL3_roi_1.npy                                       #
+#  - deficit scores | deficit_scores.npy                                #
+#                                                                       #
+# OUTPUT:                                                               #
+#  - fine-tuned model weights | pre-tune_vae.pth                        #
+#  - deficit predictions | substrate_prediction.npy                     #
+#  - training / validation performance arrays & plots                   #
+#                                                                       #
+#########################################################################
 
+import sys,scipy.io, os, json, numpy as np, matplotlib.pyplot as plt, shutil, torch, torch.optim as optim, nibabel
 
-import scipy.io, os, json
-import numpy as np
-import matplotlib.pyplot as plt
-
-from mpl_toolkits.axes_grid1 import ImageGrid
+# from mpl_toolkits.axes_grid1 import ImageGrid
 from sklearn.model_selection import train_test_split
-
 from torch.utils.data import Dataset, DataLoader
-import torch
-import torch.optim as optim
-
-import shutil
-import torch as tc
-
 
 # ---- import model classes ---- #
-os.chdir('call_split')
+os.chdir('3D')
 from model import *
 from utils import log_msg, get_variable, get_device, DeficitDataset, visualize_inference3D, count_parameters, vec_dice, dice_3D, get_deficit
 
@@ -39,23 +46,27 @@ log_msg("START | running deep lesion deficit mapping")
 #########################################
 
 log_msg("UPDATE | parsing input variables")
-# ---- template path ---- #
-Path = get_variable('TEMPLATEDIR')
+
+# ---- set global variables ---- #
+Path = '/data'
+# Path = '/mnt/h/DLDM/3D'
+device = get_device()
+Tensor = torch.cuda.FloatTensor
 
 # ---- lesion subset count ---- #
 n_lesions = get_variable('N_LESIONS')
 # set N for initial testing purposes
-# n_lesions = 1000
 if n_lesions:
     n_lesions = int(n_lesions)
 
 # ---- output directory ---- #
 
 out_dir = get_variable('OUTDIR')
+
 if not out_dir:
-    out_dir = '/data/out_dir_3Dtest'
+    out_dir = os.path.join(Path, 'pre-tune')
 else:
-    out_dir = os.path.join('/data', out_dir)
+    out_dir = os.path.join(Path, out_dir)
 
 if not os.path.isdir(out_dir):
     os.makedirs(out_dir, exist_ok=True)
@@ -64,18 +75,23 @@ log_msg(f'UPDATE | output directory: {out_dir}')
 
 # ---- pretraining  ---- #
 pretraining = get_variable('PRETRAINING')
+
 if pretraining:
     pretraining = eval(pretraining)
     if pretraining:
         log_msg(f'UPDATE | utilizing pretrained model')
+else:
+    pretraining=True
+    log_msg(f'UPDATE | utilizing pretrained model')
 
 # ---- pretraining model weights ---- #
-# model_path = get_variable('MODEL_PATH')
-# if not model_path: 
-#     model_path = os.path.join('/data','pretrain_10K','recon_vae.pth')
 
-# if pretraining:
-#     log_msg(f'UPDATE | using pretrained model weights: {model_path}')
+model_path = get_variable('MODEL_PATH')
+if not model_path: 
+    model_path = os.path.join(Path,'pre-recon','pre-recon_vae.pth')
+
+if pretraining:
+    log_msg(f'UPDATE | using pretrained model weights: {model_path}')
 
 # ---- anatomically constrained inference  ---- #
 aci = get_variable('ACI')
@@ -84,82 +100,34 @@ if aci:
     if aci:
         log_msg(f'UPDATE | utilizing anatomically constrained model')
 
-
-
 # ---- lesion sets ---- #
 
 train_lesion_type = get_variable('TRAIN_LESION_TYPE')
 
 if not train_lesion_type:
-    train_lesion_type = 'pretrain-tune_5K_2D.npy'
-
-# lesion_type = 'icl_20K_2D.npy'
+    train_lesion_type = 'Synthetic-masks-tune-5K.npy'
 
 log_msg(f'UPDATE | training lesion type: {train_lesion_type}')
 
 
-test_lesion_type = get_variable('TEST_LESION_TYPE')
-
-if not test_lesion_type:
-    test_lesion_type = 'predict_5K_2D.npy'
-
-# lesion_type = 'icl_20K_2D.npy'
-
-log_msg(f'UPDATE | training lesion type: {test_lesion_type}')
-
-
 # ---- substrate ---- #
 
-# first substrate
-# substrate_type = 'cognition_substrate_2D.npy'
-# second substrate
-# substrate_type = 'motor_substrate_2D.npy'
 substrate_type = get_variable('SUBSTRATE_TYPE')
 
 if not substrate_type:
     substrate_type = 'AAL3_roi_1.npy'
 
-# substrate = np.load(os.path.join(Path,'validation',substrate_type))
-substrate = np.load(os.path.join('/data','substrates',substrate_type))
-# substrate = np.rot90(np.sum(substrate, axis = 0),1)
-substrate = np.where(substrate>0,1,0)
-# ---- multiple NQ based substrates ---- #
+log_msg(f'UPDATE | using substrate: {substrate_type}')
 
-# Networks=['Hearing','Language','Introspection','Cognition','Mood','Memory','Aversion','Coordination','Interoception','Sleep','Reward','Visual','Spatial','Somatosensory']
 
-# # use for validation:'Motor'
-# test_substrate = 'Motor'
-# log_msg(f'UPDATE | using multiple NeuroQuery based substrates')
-# substrates = dict()
-# for n in Networks:
-#     substrates[n] = np.load(os.path.join('/data','substrates/maps', f'Giles_et_al_2013_{n}_2D.npy'))
-#     log_msg(f'UPDATE | using substrate: {n}')
-
-# ---- single NQ based substrates ---- #
-# Networks=['Motor']
-
-# use for validation:'Motor'
-# test_substrate = 'Motor'
-# log_msg(f'UPDATE | using multiple NeuroQuery based substrates')
-# substrates = dict()
-# for n in Networks:
-#     substrates[n] = np.load(os.path.join('/data','substrates/maps', f'Giles_et_al_2013_{n}_2D.npy'))
-#     log_msg(f'UPDATE | using substrate: {n}')
-
-test_substrate = substrate_type
 # ---- deficit scores ---- #
 
 deficits_train = get_variable('DEFICITS_TRAIN')
-deficits_test = get_variable('DEFICITS_TEST')
 
 if not deficits_train:
-    deficits_train = ['overlap_ratio_noisy']
+    deficits_train = 'overlap-ratio-noisy'
 
-if not deficits_test:
-    deficits_test = ['overlap_ratio_noisy']
-
-log_msg(f'UPDATE | training deficits: {deficits_train}')
-log_msg(f'UPDATE | testing deficits: {deficits_test}')
+log_msg(f'UPDATE | synthetic functional deficit: {deficits_train}')
 
 
 #########################################
@@ -169,85 +137,88 @@ log_msg(f'UPDATE | testing deficits: {deficits_test}')
 #########################################
 
 # ---- lesions ---- #
-train_lesions = np.load(os.path.join('/data','lesions',train_lesion_type))
-train_lesions = np.where(train_lesions>0,1,0)
-# train_lesions = np.load(os.path.join(Path,'validation',lesion_type))
+
+try:
+    lesions = np.load(os.path.join(Path, 'lesions', train_lesion_type))    
+except:
+    log_msg(f'ERROR | lesion file not found: {os.path.join(Path, "lesions", train_lesion_type)}')
+    sys.exit(1)
+
+
+# ---- deficit scores ---- #
+
+try:
+    deficits = np.load(os.path.join(Path, 'deficits', f'{deficits_train}_{train_lesion_type}'))
+except:
+    log_msg(f'ERROR | deficit scores file not found: {os.path.join(Path, "deficits", f"{deficits_train}_scores.npy")}')
+    sys.exit(1)
+
+
+# ---- limit number of lesions for testing ---- #
 if n_lesions:
-    train_lesions = train_lesions[:n_lesions,:,:]
+    lesions = lesions[:n_lesions,:]
+    deficits = deficits[:n_lesions]
 
-# test_lesions = np.load(os.path.join('/data','pretrain','validation_10K_2D.npy'))
-test_lesions = np.load(os.path.join('/data','lesions',test_lesion_type))
-test_lesions = np.where(test_lesions>0,1,0)
+# ---- neural substrate ---- #
 
-# ---- reduce validation set to 1K lesions ---- #
-test_lesions = test_lesions[:1000,:,:]
+try:
+    substrate = np.load(os.path.join(Path,'substrates',substrate_type))
+except:
+    log_msg(f'ERROR | substrate file not found: {substrate_type}')
+    sys.exit(1)
 
-# ---- ensure non-empty lesions ---- #
+# ---- ensure binary masks ---- #
+lesions = np.where(lesions>0,1,0)
+substrate = np.where(substrate>0,1,0)
 
-sum_check = np.sum(train_lesions, axis=(1,2))
+
+
+# ---- load pretrained weights ---- #
+if pretraining:
+    pretrain_dict = torch.load(model_path, map_location=device)
+    pretrain_keys = list(pretrain_dict.keys())
+    # ---- get model parameters from pretrained model ---- #
+    PRE_Z_DIM = pretrain_dict['mask_model.mu.weight'].shape[0]
+    PRE_INITIAL_CONV_KERNELS = pretrain_dict[pretrain_keys[0]].shape[0]
+    log_msg(f'UPDATE | loaded pretrained model weights from: {model_path}')
+
+
+
+#########################################
+#                                       #
+#              PREPROCESSING            #
+#                                       #
+#########################################
+
+# ---- split training / testing sets ---- #
+train_lesions, test_lesions, train_labels, test_labels = train_test_split(lesions, deficits,test_size=0.1, random_state=42)
+
+sum_check = np.sum(train_lesions, axis=tuple(np.arange(1, train_lesions.ndim)))
 empty_lesion = np.where(sum_check==0)
 train_lesions = np.delete(train_lesions, empty_lesion, axis=0)
 log_msg(f'UPDATE | number of empty training lesions removed: {len(empty_lesion[0])}')
 
-sum_check = np.sum(test_lesions, axis=(1,2))
+sum_check = np.sum(test_lesions, axis=tuple(np.arange(1, test_lesions.ndim)))
 empty_lesion = np.where(sum_check==0)
 test_lesions = np.delete(test_lesions, empty_lesion, axis=0)
 log_msg(f'UPDATE | number of empty validation lesions removed: {len(empty_lesion[0])}')
-
-
-# ---- select consistent lesion subset ---- #
-# first set of lesions for inference pre-training
-# n_lesions = 2500
-# if n_lesions:
-#     train_lesions = train_lesions[:n_lesions,:,:]
-#     log_msg(f'UPDATE | using random {n_lesions} lesions')
 
 log_msg(f'UPDATE | number of training lesions: {train_lesions.shape[0]}')
 log_msg(f'UPDATE | number of validation lesions: {test_lesions.shape[0]}')
 
 # ---- load template brain ---- #
 # template_brain = np.load(os.path.join(Path,'validation','MNI152_T1_32.npy'))
-template_brain = np.load(os.path.join('/data','templates','MNI152_64.npy'))
-
-# template_brain = np.rot90(np.load(os.path.join(Path,'validation','mni_brain_32.npy'))[16,:,:],1)
-template_brain = np.rot90(np.sum(template_brain, axis = 0),1)
-
-# ---- calculate deficit scores ---- #
+template_brain = nibabel.load(os.path.join(Path,'templates','MNI152_64_brain.nii.gz')).get_fdata()
+log_msg(f'UPDATE | loaded template brain from: {os.path.join(Path,"templates","MNI152_64_brain.nii.gz")}')
 
 
-# ---- training deficits ---- #
-scores_train = dict()
-noise_levels = [0.25]
-# noise_levels = [0.25, 0.5, 0.75]
+# ---- visualize lesion aggregates ---- #
+train_aggregate = np.sum(train_lesions, axis=0)
+test_aggregate =  np.sum(test_lesions, axis=0)
 
-
-# for net in Networks:
-#     substrate = substrates[net]
-#     log_msg(f'UPDATE | calculating deficits for substrate: {net}')
-# for deficit_type in deficits_train:
-#     for n in noise_levels:
-#         if deficit_type == 'overlap_ratio_noisy':
-#             idx = f'{deficit_type}-{n}'
-#             scores_train[idx] = get_deficit(train_lesions, substrate, deficit_type, n)
-#         else:
-#             idx = f'{deficit_type}'
-#             scores_train[idx] = get_deficit(train_lesions, substrate, deficit_type, 0.25)
-
-for n in noise_levels:
-    scores_train[deficits_train+str(n)] = get_deficit(train_lesions, substrate, deficits_train, n)
-
-# scores_train[''] = get_deficit(train_lesions,substrate, 'trans', 0.25)
-
-deficits = list(scores_train.keys())
-
-# ---- testing deficits ---- #
-# retaining single substrate for validation
-test_substrate = substrate
-# test_substrate = np.load(os.path.join('/data','substrates/maps', f'Giles_et_al_2013_{test_substrate}_2D.npy'))
-
-scores_test = get_deficit(test_lesions, test_substrate, deficits_test, 0.25)
-
-
+empty = np.ones(train_aggregate.shape)
+visualize_inference3D(empty, train_aggregate, template_brain, os.path.join(out_dir, f'lesion_aggregate_train.png'))
+visualize_inference3D(empty, test_aggregate, template_brain, os.path.join(out_dir, f'lesion_aggregate_test.png'))
 
 #########################################
 #                                       #
@@ -255,11 +226,11 @@ scores_test = get_deficit(test_lesions, test_substrate, deficits_test, 0.25)
 #                                       #
 #########################################
 
-params = ['INPUT_SIZE','CONTINUOUS', 'Z_DIM','EPOCHS','INITIAL_CONV_KERNELS','L2_REG','LR', 'LATENT_SPLIT']
+params = ['CONTINUOUS', 'Z_DIM','EPOCHS','INITIAL_CONV_KERNELS','L2_REG','LR', 'LATENT_SPLIT']
 
 
 # ---- load default parameters ---- #
-with open(os.path.join(Path,'validation','model_param_defaults.json')) as f:
+with open(os.path.join(Path,'templates','model-params-defaults.json')) as f:
     model_params = json.load(f)
     print(model_params)
 
@@ -269,9 +240,11 @@ for p in params:
     if locals()[p]:
         model_params[p] = eval(locals()[p])
 
-# ---- save final model parameters ---- #
-with open(os.path.join(out_dir,'model_parameters.json'), "w") as f:
-        json.dump(model_params, f, indent=4)
+# ---- update with pretraining parameters ---- #
+if pretraining:
+    model_params['Z_DIM'] = PRE_Z_DIM
+    model_params['INITIAL_CONV_KERNELS'] = PRE_INITIAL_CONV_KERNELS
+
 
 model_params['INPUT_SIZE'] = train_lesions.shape[-1]
 # model_params['CONTINUOUS'] = True
@@ -280,107 +253,90 @@ log_msg('UPDATE | using model parameters:')
 for p in model_params.keys():
     log_msg(f'UPDATE | {p}: {model_params[p]}')
 
-
-# ---- select corresponding pretraining model weights ---- #
-
-model_path = get_variable('MODEL_PATH')
-if not model_path: 
-    if model_params['LATENT_SPLIT']==True:
-        model_path = os.path.join('/data','pretrain_10K','recon-vae-weights_ZDIM-20.pth')
-    else:
-        model_path = os.path.join('/data','pretrain_10K','recon-vae-weights_ZDIM-40.pth')
-
-if pretraining:
-    log_msg(f'UPDATE | using pretrained model weights: {model_path}')
+# ---- save final model parameters ---- #
+with open(os.path.join(out_dir,'model_parameters.json'), "w") as f:
+        json.dump(model_params, f, indent=4)
 
 #########################################
 #                                       #
-#                DATASETS               #
+#               DATASETS                #
 #                                       #
 #########################################
 
-# ---- add color channel ---- #
-if len(train_lesions.shape) < 4:
+# ---- add color channel if missing---- #
+if train_lesions.ndim < 5:
     train_lesions = np.expand_dims(train_lesions, axis=1)
 
-if len(test_lesions.shape) < 4:
+if test_lesions.ndim < 5:
     test_lesions = np.expand_dims(test_lesions, axis=1)
 
 # ---- determine batch size ---- #
 n_samples = train_lesions.shape[0]
 
 if n_samples > 511:
-    batch_size = 256
+    batch_size = 128
 else:
     batch_size = int(np.round(n_samples // 10,0))
 
 log_msg(f'UPDATE | batch size: {batch_size}')
 
-# ---- prepare training dataset using various deficit scores ---- #
+# ---- prepare training dataset u---- #
+
+train_dataset = DeficitDataset(data=train_lesions, labels=train_labels)
+train_loaders = DataLoader(train_dataset, 
+                           batch_size=batch_size, 
+                           drop_last=False,
+                           shuffle=True, 
+                           num_workers=0, 
+                           pin_memory=True)
+
+# ---- prepare testing dataset---- #
+
+test_dataset = DeficitDataset(data=test_lesions, labels=test_labels)
+test_loader = DataLoader(test_dataset, 
+                        batch_size=batch_size, 
+                        drop_last=False,
+                        shuffle=True, 
+                        num_workers=0, 
+                        pin_memory=True)
 
 
-datasets = dict()
+#########################################
+#                                       #
+#              VAE MODEL                #
+#                                       #
+#########################################
 
-for deficit_type in deficits:
-    datasets[deficit_type] = DeficitDataset(data=train_lesions, labels=scores_train[deficit_type])
-
-
-# dataset = DeficitDataset(data=train_data, labels=train_labels)
-train_loaders = dict()
-for deficit_type in deficits:
-    train_loaders[deficit_type] = DataLoader(datasets[deficit_type], batch_size=batch_size, drop_last=False,shuffle=True, num_workers=0, pin_memory=True)
-
-# ---- prepare testing dataset using complex deficit scores ---- #
-
-# VALIDATION
-val_dataset = DeficitDataset(data=test_lesions, labels=scores_test)
-val_loader = DataLoader(val_dataset, batch_size=batch_size, drop_last=False,
-                                            shuffle=True, num_workers=0, pin_memory=True)
-
-
-#################################
-# device = torch.device("cuda:0")
-device = get_device()
-
-
-
-Tensor = torch.cuda.FloatTensor
 
 torch.manual_seed(42)
 
+# ---- define model ---- #
 model = ModelWrapper(model_params['INPUT_SIZE'],
                      z_dim=model_params['Z_DIM'],
                      start_dims=model_params['INITIAL_CONV_KERNELS'],
                      continuous=model_params['CONTINUOUS'],
                      aci=aci,
                      template = np.where(template_brain>0,1,0),
-                     latent_split=model_params['LATENT_SPLIT']).to(device)
+                     latent_split=eval(model_params['LATENT_SPLIT'])).to(device)
 
-# Other optimisers work as well, Adamax is quite stable though
+
+# ---- define Adamax optimizer ---- #
 optimizer = optim.Adamax(model.parameters(),
                          weight_decay=model_params['L2_REG'],
                          lr=model_params['LR'])
 
 log_msg('UPDATE | model paramter count: {}'.format(count_parameters(model)))
 
-# ---- set epochs to account for changes in training set ---- #
-# repetition_factor = 5
-# dataset_reps = 5
-# model_params['EPOCHS'] = len(deficits) * repetition_factor * dataset_reps
-# p = 'EPOCHS'
-# log_msg(f'UPDATE | {p}: {model_params[p]}')
 
 
-#################################
-#                               #
-#        USE PRETRAINING        #
-#                               #
-#################################
+
+#########################################
+#                                       #
+#             PRETRAINING               #
+#                                       #
+#########################################
 
 if pretraining:
-    # ---- load pretrained weights ---- #
-    pretrain_dict = torch.load(model_path, map_location=device)
-    pretrain_keys = list(pretrain_dict.keys())
     model_keys = list(model.state_dict().keys())
     # ---- MAP ENCODER WEIGHTS ---- #
     dims = model.state_dict()[model_keys[0]].shape
@@ -397,9 +353,9 @@ if pretraining:
             model.state_dict()[k] = model.state_dict()[k].copy_(pretrain_dict[k])
             log_msg(f'UPDATE | mapped: {k}')
     # ---- FREEZE RECONSTRUCTION WEIGHTS ---- #
-    for layer in model.mask_model.decoder_reconstruction.parameters():
-        layer.requires_grad = False
-    log_msg(f'UPDATE | frozen reconstruction decoder weights')
+    # for layer in model.mask_model.decoder_reconstruction.parameters():
+    #     layer.requires_grad = False
+    # log_msg(f'UPDATE | frozen reconstruction decoder weights')
     # ---- FREEZE ENCODER WEIGHTS ---- #
     # for layer in model.mask_model.encoder.parameters():
     #     layer.requires_grad = False
@@ -432,7 +388,7 @@ dims = train_lesions.shape[2:]
 
 # --- set epochs to account for changes in training set --- #
 
-# model_params['EPOCHS'] = 210
+# model_params['EPOCHS'] = int(model_params['EPOCHS'] )
 
 inference_predictions = np.zeros([model_params['EPOCHS'], *dims])    
 # ---- prepare training sets ---- #
@@ -462,7 +418,7 @@ for epoch in range(model_params['EPOCHS']):
     # The trackers for the mean and scale of the inference map
     vae_mask = np.zeros((dims))
     vae_scale = np.zeros((dims))
-    for (x, y) in train_loaders[training_set]:
+    for (x, y) in train_loaders:
         optimizer.zero_grad()
         x = x.type(Tensor).to(device)
         y = y.type(Tensor).to(device)
@@ -479,9 +435,10 @@ for epoch in range(model_params['EPOCHS']):
         # # if epoch == 5:
         #     initial_loss = ret_dict['loss'].mean()
         # loss = ret_dict['mask_ll'] + (1-(epoch/model_params['EPOCHS'])) * ret_dict['recon_ll'] + ret_dict['kl']
-        if epoch > 20:
-            for layer in model.mask_model.decoder_reconstruction.parameters():
-                layer.requires_grad = True
+        # ---- unfreeze reconstruction decoder after 20 epochs ---- #
+        # if epoch > 20:
+        #     for layer in model.mask_model.decoder_reconstruction.parameters():
+        #         layer.requires_grad = True
         t_epoch_loss += loss.item()
         loss.backward()
         optimizer.step()
@@ -493,14 +450,14 @@ for epoch in range(model_params['EPOCHS']):
         for l in range(pred.shape[0]):
             pred[l] = np.where(pred[l]>np.quantile(pred[l],0.95),1,0)
         target = x.cpu().data.numpy()
-        batch_dice.append(vec_dice(pred, target))
+        batch_dice.append(vec_dice(pred[:,0,:,:,:], target[:,0,:,:,:]))
     train_dice.append(np.mean(np.concatenate(batch_dice)))
     train_dice_iqr.append(scipy.stats.iqr(np.concatenate(batch_dice)))
     training_losses.append(t_epoch_loss / train_acc)
     vae_mask = vae_mask / train_acc
-    val_mask = tc.from_numpy(vae_mask).type(Tensor).to(device).view(1, 1,*dims)
+    val_mask = torch.from_numpy(vae_mask).type(Tensor).to(device).view(1, 1,*dims)
     vae_scale = vae_scale / train_acc
-    val_scale = tc.from_numpy(vae_scale).type(Tensor).to(device).view(1, 1,*dims)
+    val_scale = torch.from_numpy(vae_scale).type(Tensor).to(device).view(1, 1,*dims)
     val_acc = 0
     accuracy_acc = 0
     loss_acc = 0
@@ -509,7 +466,7 @@ for epoch in range(model_params['EPOCHS']):
     recon_acc = 0
     batch_dice = []
     with torch.no_grad():
-        for (x, y) in val_loader:
+        for (x, y) in test_loader:
             x = x.type(Tensor).to(device)
             y = y.type(Tensor).to(device)
             ret_dict = model(x, y,
@@ -526,7 +483,7 @@ for epoch in range(model_params['EPOCHS']):
             for l in range(pred.shape[0]):
                 pred[l] = np.where(pred[l]>np.quantile(pred[l],0.95),1,0)
             target = x.cpu().data.numpy()
-            batch_dice.append(vec_dice(pred, target))
+            batch_dice.append(vec_dice(pred[:,0,:,:,:], target[:,0,:,:,:]))
     test_dice.append(np.mean(np.concatenate(batch_dice)))
     test_dice_iqr.append(scipy.stats.iqr(np.concatenate(batch_dice)))
     loss = loss_acc / val_acc
@@ -538,7 +495,7 @@ for epoch in range(model_params['EPOCHS']):
     inference_predict = ret_dict['mean_mask'].cpu().data.numpy().reshape(dims)
     inference_predictions[epoch,:,:] = inference_predict
     pred = np.where(inference_predict>np.quantile(inference_predict,0.95),1,0)
-    inference_dice.append(dice_2D(pred, test_substrate))
+    inference_dice.append(dice_3D(pred, substrate))
     # print(f'Epoch: {epoch}, mask likelihood: {lk}, KL: {kl}, recon likelihood: {rec}')
     if lk < best_lk:
         best_loss = loss
@@ -556,8 +513,8 @@ for epoch in range(model_params['EPOCHS']):
         imgs = x.cpu().data.numpy()
         recons = ret_dict['lesion_recon'].cpu().data.numpy()
         # inference_predict = ret_dict['mean_mask'].cpu().data.numpy().reshape(32,32)
-        visualize_inference2D(test_substrate, inference_predict, template_brain, os.path.join(out_dir, f'inference_epoch_{epoch}.png'))
-        visualize_inference2D(imgs[0,:,:].reshape(dims), recons[0,:,:].reshape(dims), template_brain, os.path.join(out_dir, f'reconstruction_epoch_{epoch}.png'))
+        visualize_inference3D(substrate, inference_predict, template_brain, os.path.join(out_dir, f'inference_epoch_{epoch}.png'))
+        visualize_inference3D(imgs[0,:,:].reshape(dims), recons[0,:,:].reshape(dims), template_brain, os.path.join(out_dir, f'reconstruction_epoch_{epoch}.png'))
         log_msg(f'UPDATE | loss: {training_losses[epoch]}, train-dice: {train_dice[epoch]}, epoch: {epoch}')
 
 
@@ -581,10 +538,10 @@ np.save(os.path.join(out_dir, f'dice_inference.npy'), inference_dice)
 #########################################
 
 # ---- substrate predictions ---- #
-for th in [0.25,0.5,0.75,0.9,0.95]:
+for th in [0.25,0.5,0.75,0.9,0.95, 0.99, 0.995]:
     tmp = inference_predictions[epoch,:,:,:]  # Updated for 3D
     testing = np.where(tmp>np.quantile(tmp,th),1,0)
-    visualize_inference#D(test_substrate, testing, template_brain, os.path.join(out_dir, f'Inference_threshold_{th}.png'))
+    visualize_inference3D(substrate, testing, template_brain, os.path.join(out_dir, f'Inference_threshold_{th}.png'))
 
 
 # ---- training / testing performance ---- #

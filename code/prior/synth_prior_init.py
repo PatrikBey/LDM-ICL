@@ -1,4 +1,10 @@
 #########################################################################
+#                                      ###     ###    #######   ###     #
+#                                      ###     ###   ###        ###     #
+#                                      ###     ###   ###        ###     #
+#                                      ###     ###   ###        ###     #
+#                                       #########     #######   #########
+#                                                                       #
 #                                                                       #
 # This script contains code for the initial generation of               #
 # synthetic 3D lesion masks for Ischaemic stroke lesions.               #
